@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Équipe de projet</title>
+<style>
+:root{--bg:#eef1f4;--card:#fff;--ink:#1b2530;--mute:#5d6b7a;--line:#d3dae1;--accent:#1f5f8b;--accent-ink:#fff;--ok:#1d7a4a;--err:#b3261e;--field:#f7f9fb;--thumb:rgba(0,0,0,.28);--thumb-hover:rgba(0,0,0,.42);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#12171c;--card:#1b222a;--ink:#e6ebf0;--mute:#93a1b0;--line:#2e3944;--accent:#5aa9dc;--accent-ink:#0c1620;--ok:#5fcf93;--err:#ff8a80;--field:#151b21;--thumb:rgba(255,255,255,.28);--thumb-hover:rgba(255,255,255,.42);color-scheme:dark}}
+:root[data-theme=dark]{--bg:#12171c;--card:#1b222a;--ink:#e6ebf0;--mute:#93a1b0;--line:#2e3944;--accent:#5aa9dc;--accent-ink:#0c1620;--ok:#5fcf93;--err:#ff8a80;--field:#151b21;--thumb:rgba(255,255,255,.28);--thumb-hover:rgba(255,255,255,.42);color-scheme:dark}
+*{box-sizing:border-box}
+
+/* Safari-style scrollbar: transparent track, thin floating rounded thumb */
+*{scrollbar-width:thin;scrollbar-color:var(--thumb) transparent}
+*::-webkit-scrollbar{width:8px;height:8px;background:transparent}
+*::-webkit-scrollbar-track{background:transparent}
+*::-webkit-scrollbar-thumb{background-color:var(--thumb);background-clip:padding-box;border:2px solid transparent;border-radius:99px}
+*::-webkit-scrollbar-thumb:hover{background-color:var(--thumb-hover)}
+
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);font:15px/1.5 "Segoe UI",system-ui,sans-serif;display:grid;place-items:start center;padding:20px}
+main{width:100%;max-width:460px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:28px;position:relative;margin-top:20px}
+h1{font-size:21px;margin:0 0 18px;padding-right:44px;letter-spacing:-.01em}
+label{display:block;font-weight:600;margin:0 0 4px}
+.hint{color:var(--mute);font-weight:400}
+input,select{width:100%;font:inherit;color:var(--ink);background:var(--field);border:1px solid var(--line);border-radius:6px;padding:9px 11px}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.row{margin-bottom:16px}
+.row-split{display:flex;gap:10px}
+.field-num{flex:0 0 64px}
+.field-ttl{flex:1;min-width:0}
+.preview{border-left:3px solid var(--accent);padding:2px 0 2px 12px;margin:22px 0;color:var(--mute);font-size:13.5px}
+.preview b{display:block;color:var(--ink);font-weight:600;word-break:break-all}
+.preview div+div{margin-top:8px}
+button.primary{width:100%;font:inherit;font-weight:600;background:var(--accent);color:var(--accent-ink);border:0;border-radius:6px;padding:11px;cursor:pointer}
+button.primary:disabled{opacity:.55;cursor:default}
+#gear{position:absolute;top:18px;right:18px;width:34px;height:34px;border-radius:6px;border:1px solid var(--line);background:var(--field);color:var(--ink);cursor:pointer;font-size:17px;line-height:1}
+#settings{display:none;position:absolute;top:58px;right:18px;width:220px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;box-shadow:0 8px 24px rgba(0,0,0,.18);z-index:2}
+#settings.open{display:block}
+#settings .row:last-child{margin-bottom:0}
+#msg{margin-top:16px;min-height:22px;font-size:14px}
+#msg.ok{color:var(--ok)}#msg.err{color:var(--err)}
+#msg a{color:inherit;font-weight:600;cursor:pointer;text-decoration:underline}
+#overlay{display:none;position:fixed;inset:0;background:rgba(10,14,18,.55);place-items:center;z-index:10;padding:20px}
+#overlay.open{display:grid}
+#consent{width:100%;max-width:420px;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:26px}
+#consent h2{margin:0 0 12px;font-size:18px}
+#consent p{margin:0 0 10px;color:var(--mute);font-size:14px}
+#consent ul{margin:0 0 18px;padding-left:20px;color:var(--mute);font-size:14px}
+#consent li{margin-bottom:5px}
+#consent li b{color:var(--ink);font-weight:600}
+.consent-actions{display:flex;gap:10px}
+.consent-actions button{flex:1;font:inherit;font-weight:600;border-radius:6px;padding:10px;cursor:pointer}
+#consentAgree{background:var(--accent);color:var(--accent-ink);border:0}
+#consentDecline{background:var(--field);color:var(--ink);border:1px solid var(--line)}
+
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:0 0 22px;padding-right:44px}
+.tab{font:inherit;font-weight:600;background:none;border:0;border-bottom:2px solid transparent;color:var(--mute);padding:8px 2px;margin-right:18px;cursor:pointer}
+.tab.active{color:var(--ink);border-bottom-color:var(--accent)}
+.view{display:none}
+.view.active{display:block}
+
+.owners-field{position:relative}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.chips:empty{margin-bottom:0}
+.chip{display:flex;align-items:center;gap:6px;background:var(--field);border:1px solid var(--line);border-radius:999px;padding:4px 6px 4px 10px;font-size:13px}
+.chip button{font:inherit;line-height:1;background:none;border:0;color:var(--mute);cursor:pointer;padding:0 2px}
+.chip button:hover{color:var(--err)}
+#ownerResults{display:none;position:absolute;left:0;right:0;top:100%;margin-top:4px;background:var(--card);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);max-height:220px;overflow:auto;z-index:3}
+#ownerResults.open{display:block}
+.result{display:block;width:100%;text-align:left;font:inherit;background:none;border:0;border-bottom:1px solid var(--line);padding:9px 11px;cursor:pointer;color:var(--ink)}
+.result:last-child{border-bottom:0}
+.result:hover,.result:focus-visible{background:var(--field)}
+.result .rname{font-weight:600;display:block}
+.result .remail{color:var(--mute);font-size:12.5px}
+.result.empty{color:var(--mute);cursor:default}
+
+.hist-empty{color:var(--mute);font-size:14px;padding:6px 0}
+.hist-list{display:flex;flex-direction:column;gap:10px}
+.hist-item{border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;align-items:center;gap:8px}
+.hist-main{flex:1;min-width:0}
+.hist-title{font-weight:600;word-break:break-word}
+.hist-meta{color:var(--mute);font-size:12.5px;margin-top:2px}
+.hist-open{font:inherit;font-weight:600;font-size:13px;background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:7px 12px;cursor:pointer;white-space:nowrap}
+.hist-open:disabled{opacity:.5;cursor:default}
+.icon-btn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;flex:0 0 32px;border-radius:6px;border:1px solid var(--line);background:var(--field);color:var(--ink);cursor:pointer;padding:0}
+.icon-btn svg{width:16px;height:16px}
+.icon-btn:disabled{opacity:.5;cursor:default}
+.icon-btn.danger{color:var(--err);border-color:var(--err)}
+.icon-btn.danger:hover{background:var(--err);color:#fff}
+.icon-btn.sync:hover{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+</style>
+</head>
+<body>
+<main>
+  <button id="gear" type="button" aria-haspopup="true" aria-expanded="false">⚙</button>
+  <div id="settings" role="dialog">
+    <div class="row"><label for="lang" data-i="language"></label>
+      <select id="lang"><option value="system" data-i="system"></option><option value="fr">Français</option><option value="en">English</option></select></div>
+    <div class="row"><label for="theme" data-i="theme"></label>
+      <select id="theme"><option value="system" data-i="system"></option><option value="light" data-i="light"></option><option value="dark" data-i="dark"></option></select></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" id="tabCreateBtn" type="button" data-i="createTab"></button>
+    <button class="tab" id="tabHistoryBtn" type="button" data-i="sitesTab"></button>
+  </div>
+
+  <div id="viewCreate" class="view active">
+    <h1 data-i="heading"></h1>
+    <form id="f" novalidate>
+      <div class="row row-split">
+        <div class="field-num"><label for="num"><span data-i="number"></span></label>
+          <input id="num" inputmode="numeric" maxlength="3" autocomplete="off" placeholder="430" autofocus></div>
+        <div class="field-ttl"><label for="ttl"><span data-i="title"></span></label>
+          <input id="ttl" autocomplete="off" placeholder="Pont de Québec (tablier)"></div>
+      </div>
+      <div class="row owners-field">
+        <label for="ownerInput"><span data-i="owners"></span> <span class="hint" data-i="ownersHint"></span></label>
+        <div class="chips" id="ownerChips"></div>
+        <input id="ownerInput" autocomplete="off">
+        <div id="ownerResults" role="listbox"></div>
+      </div>
+      <div class="preview">
+        <div><span data-i="teamName"></span><b id="pName">—</b></div>
+        <div><span data-i="alias"></span><b id="pAlias">—</b></div>
+      </div>
+      <button class="primary" id="go" type="submit"></button>
+      <div id="msg" role="status" aria-live="polite"></div>
+    </form>
+  </div>
+
+  <div id="viewHistory" class="view">
+    <h1 data-i="sitesTab"></h1>
+    <div id="histEmpty" class="hist-empty" data-i="historyEmpty"></div>
+    <div id="histList" class="hist-list"></div>
+  </div>
+</main>
+
+<div id="overlay" role="presentation">
+  <div id="consent" role="dialog" aria-modal="true" aria-labelledby="consentTitle">
+    <h2 id="consentTitle" data-i="consentTitle"></h2>
+    <p data-i="consentIntro"></p>
+    <ul>
+      <li><b data-i="consentItem1Title"></b> — <span data-i="consentItem1"></span></li>
+      <li><b data-i="consentItem2Title"></b> — <span data-i="consentItem2"></span></li>
+      <li><b data-i="consentItem3Title"></b> — <span data-i="consentItem3"></span></li>
+    </ul>
+    <div class="consent-actions">
+      <button id="consentDecline" type="button" data-i="consentDecline"></button>
+      <button id="consentAgree" type="button" data-i="consentAgree"></button>
+    </div>
+  </div>
+</div>
+
+<script>
+const ICON_SYNC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>';
+
+const S = {
+  fr: { heading:"Créer une équipe de projet", number:"Numéro", title:"Titre du projet",
+    teamName:"Nom de l’équipe", alias:"Adresse du site (alias)", create:"Créer l’équipe", creating:"Création en cours…",
+    language:"Langue", theme:"Thème", system:"Système", light:"Clair", dark:"Sombre", settings:"Paramètres",
+    noApi:"Cette page doit être lancée par l’application Electron (run.bat ou npm start), pas ouverte dans un navigateur.", errNum:"Le numéro de projet doit comporter exactement 3 chiffres.", errTitle:"Le titre du projet est requis.",
+    errAlias:"Le titre ne contient aucun caractère utilisable pour l’adresse.",
+    signin:"Connexion à SharePoint requise…", signinFail:"Connexion annulée. Réessayez.",
+    created:"Équipe créée.", prov:"Création lancée, le site sera prêt dans quelques instants.",
+    exists:"Une équipe avec cette adresse existe déjà.", failed:"Échec : ", openSite:"Ouvrir le site",
+    consentTitle:"Autoriser la connexion à Microsoft 365 ?", consentIntro:"Cette application doit se connecter à votre compte Microsoft pour continuer. En poursuivant, vous acceptez que l’application :",
+    consentItem1Title:"Vous connecte", consentItem1:"ouvre une fenêtre de connexion Microsoft officielle et garde la session active pour les prochaines utilisations.",
+    consentItem2Title:"Crée des sites", consentItem2:"envoie des requêtes à consstellaire.sharepoint.com en votre nom pour créer des équipes de projet.",
+    consentItem3Title:"Lit l’annuaire", consentItem3:"consulte la liste des utilisateurs de votre organisation (nom, courriel) pour suggérer des propriétaires.",
+    consentAgree:"J’accepte et je continue", consentDecline:"Annuler",
+    createTab:"Créer", sitesTab:"Sites",
+    owners:"Propriétaires", ownersHint:"(en plus de vous-même)",
+    ownersSearching:"Recherche…", ownersEmpty:"Aucun résultat.", ownersAuth:"Connexion requise pour chercher des utilisateurs.",
+    historyEmpty:"Aucun site créé pour l’instant.",
+    histOpen:"Ouvrir le site", histPending:"Site en cours de création",
+    syncTitle:"Synchroniser avec OneDrive", syncFailed:"Échec de la synchronisation : ",
+    syncLaunched:"Demande envoyée à OneDrive — vérifiez si une fenêtre OneDrive s’est ouverte. Rien ne garantit que la synchronisation a réellement démarré." },
+  en: { heading:"Create a project team", number:"Number", title:"Project title",
+    teamName:"Team name", alias:"Site address (alias)", create:"Create team", creating:"Creating…",
+    language:"Language", theme:"Theme", system:"System", light:"Light", dark:"Dark", settings:"Settings",
+    noApi:"This page must be launched by the Electron app (run.bat or npm start), not opened in a browser.", errNum:"The project number must be exactly 3 digits.", errTitle:"The project title is required.",
+    errAlias:"The title has no characters usable in the site address.",
+    signin:"SharePoint sign-in required…", signinFail:"Sign-in cancelled. Try again.",
+    created:"Team created.", prov:"Creation started, the site will be ready shortly.",
+    exists:"A team with this address already exists.", failed:"Failed: ", openSite:"Open site",
+    consentTitle:"Allow connection to Microsoft 365?", consentIntro:"This app needs to sign in to your Microsoft account to continue. By proceeding, you agree that the app will:",
+    consentItem1Title:"Sign you in", consentItem1:"open an official Microsoft sign-in window and keep that session active for future use.",
+    consentItem2Title:"Create sites", consentItem2:"send requests to consstellaire.sharepoint.com on your behalf to create project teams.",
+    consentItem3Title:"Read the directory", consentItem3:"look up your organization's users (name, email) to suggest owners.",
+    consentAgree:"I agree, continue", consentDecline:"Cancel",
+    createTab:"Create", sitesTab:"Sites",
+    owners:"Owners", ownersHint:"(besides yourself)",
+    ownersSearching:"Searching…", ownersEmpty:"No results.", ownersAuth:"Sign-in needed to search people.",
+    historyEmpty:"No sites created yet.",
+    histOpen:"Open site", histPending:"Site still provisioning",
+    syncTitle:"Sync with OneDrive", syncFailed:"Sync failed: ",
+    syncLaunched:"Request sent to OneDrive — check whether a OneDrive window opened. There's no way to confirm from here that syncing actually started." },
+};
+const $ = (id) => document.getElementById(id);
+const store = { get:(k) => { try { return localStorage.getItem(k) || 'system'; } catch { return 'system'; } },
+                set:(k,v) => { try { localStorage.setItem(k,v); } catch {} } };
+let langPref = store.get('lang'), themePref = store.get('theme');
+const lang = () => langPref !== 'system' ? langPref : (navigator.language || 'fr').toLowerCase().startsWith('fr') ? 'fr' : 'en';
+const t = (k) => S[lang()][k];
+
+function applyTheme(){ const r = document.documentElement; themePref === 'system' ? r.removeAttribute('data-theme') : r.setAttribute('data-theme', themePref); }
+function applyLang(){
+  document.documentElement.lang = lang();
+  document.querySelectorAll('[data-i]').forEach((el) => el.textContent = t(el.dataset.i));
+  $('gear').title = $('gear').ariaLabel = t('settings');
+  $('go').textContent = $('go').disabled ? t('creating') : t('create');
+  renderHistory();
+  renderMsg();
+}
+
+// ---------- tabs ----------
+function showTab(name){
+  const isCreate = name === 'create';
+  $('tabCreateBtn').classList.toggle('active', isCreate);
+  $('tabHistoryBtn').classList.toggle('active', !isCreate);
+  $('viewCreate').classList.toggle('active', isCreate);
+  $('viewHistory').classList.toggle('active', !isCreate);
+  if (!isCreate) {
+    // Re-check sync status fresh every time this tab is opened, instead of
+    // only trusting the short retry window right after clicking Sync —
+    // OneDrive can take well over that window to actually finish creating
+    // the folder, and once a "not synced" result was cached, nothing was
+    // ever re-checking it again for the rest of the session. A confirmed
+    // "synced" (true) result is kept, since that's not going to un-happen.
+    for (const [key, val] of syncHeuristicCache) { if (val !== true) syncHeuristicCache.delete(key); }
+    renderHistory();
+    ensureRecentSites();
+  }
+}
+$('tabCreateBtn').addEventListener('click', () => showTab('create'));
+$('tabHistoryBtn').addEventListener('click', () => showTab('history'));
+
+// ---------- naming rules ----------
+// The title keeps only letters, digits and underscores (accents are flattened: é → e).
+const ALIAS_SEPARATOR = '-'; // site addresses can't contain spaces, so " - " becomes "-"
+const cleanTitle = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9_]/g, '');
+const names = () => {
+  const num = $('num').value, title = $('ttl').value.trim();
+  return { num, title, displayName: `${num} - ${title}`, alias: `${num}${ALIAS_SEPARATOR}${cleanTitle(title)}`.slice(0, 64) };
+};
+function preview(){ const n = names(); $('pName').textContent = n.title || n.num ? n.displayName : '—'; $('pAlias').textContent = n.title || n.num ? n.alias : '—'; }
+
+function say(html, cls){ const m = $('msg'); m.className = cls || ''; m.textContent = ''; if (typeof html === 'string') m.textContent = html; else m.append(html); }
+
+// The #msg area remembers *what* it's showing, not just the rendered text,
+// so switching language re-translates whatever is currently displayed
+// (including success/error states), instead of freezing at the language
+// that was active when the message first appeared.
+let msgState = null; // { kind: 'key'|'failed'|'success', ...details } or null
+function setMsg(kind, opts){ msgState = { kind, ...(opts || {}) }; renderMsg(); }
+function clearMsg(){ msgState = null; say('', ''); }
+function renderMsg(){
+  if (!msgState) return say('', '');
+  if (msgState.kind === 'success') {
+    const box = document.createElement('span');
+    box.append(t(msgState.prov ? 'prov' : 'created') + ' ');
+    if (msgState.url) {
+      const a = document.createElement('a'); a.textContent = t('openSite');
+      a.onclick = () => window.api.open(msgState.url);
+      box.append(a);
+    }
+    return say(box, 'ok');
+  }
+  if (msgState.kind === 'failed') return say(t('failed') + msgState.error, 'err');
+  if (msgState.kind === 'syncFailed') return say(t('syncFailed') + msgState.error, 'err');
+  // Plain translated key. msgState.cls is '' for neutral status text (e.g. "signin")
+  // and 'err' for error states — set explicitly by each caller below.
+  say(t(msgState.kind), msgState.cls || '');
+}
+
+// ---------- consent gate ----------
+// The app must not sign in or call window.api.login() until the user has
+// actively agreed in this dialog — no auto-consent, no silent retry on their
+// behalf. Consent is remembered locally so it is asked once, but can be
+// revoked by clearing app data.
+// Several places can discover at roughly the same moment that the session
+// needs a fresh sign-in (every site tile checking ownership on tab-open, for
+// instance). Without this, each one would open its own sign-in popup at
+// once; this makes them all await the same single login attempt instead.
+let loginPromise = null;
+function doLogin(){
+  if (!window.api) return Promise.resolve(false);
+  if (!loginPromise) loginPromise = window.api.login().finally(() => { loginPromise = null; });
+  return loginPromise;
+}
+
+function hasConsent(){ try { return localStorage.getItem('msConsent') === '1'; } catch { return false; } }
+function setConsent(v){ try { localStorage.setItem('msConsent', v ? '1' : '0'); } catch {} }
+function askConsent(){
+  return new Promise((resolve) => {
+    if (hasConsent()) return resolve(true);
+    applyLang();
+    $('overlay').classList.add('open');
+    const cleanup = () => { $('overlay').classList.remove('open'); $('consentAgree').onclick = null; $('consentDecline').onclick = null; };
+    $('consentAgree').onclick = () => { setConsent(true); cleanup(); resolve(true); };
+    $('consentDecline').onclick = () => { cleanup(); resolve(false); };
+  });
+}
+
+// ---------- owners: search + chips ----------
+let owners = []; // { name, email }
+let ownerSeq = 0;
+
+function renderChips(){
+  const box = $('ownerChips');
+  box.textContent = '';
+  owners.forEach((o, i) => {
+    const chip = document.createElement('span'); chip.className = 'chip';
+    const label = document.createElement('span'); label.textContent = o.name || o.email;
+    const rm = document.createElement('button'); rm.type = 'button'; rm.textContent = '×'; rm.title = o.email;
+    rm.addEventListener('click', () => { owners.splice(i, 1); renderChips(); });
+    chip.append(label, rm); box.append(chip);
+  });
+}
+
+function closeResults(){ $('ownerResults').classList.remove('open'); $('ownerResults').textContent = ''; }
+function showResultsMessage(text){
+  const box = $('ownerResults');
+  box.textContent = '';
+  const d = document.createElement('div'); d.className = 'result empty'; d.textContent = text;
+  box.append(d); box.classList.add('open');
+}
+function showResults(people){
+  const box = $('ownerResults');
+  box.textContent = '';
+  const fresh = people.filter((p) => !owners.some((o) => o.email.toLowerCase() === p.email.toLowerCase()));
+  if (!fresh.length) return showResultsMessage(t('ownersEmpty'));
+  fresh.forEach((p) => {
+    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'result';
+    const nm = document.createElement('span'); nm.className = 'rname'; nm.textContent = p.name;
+    const em = document.createElement('span'); em.className = 'remail'; em.textContent = p.email;
+    btn.append(nm, em);
+    btn.addEventListener('click', () => {
+      owners.push(p); renderChips();
+      $('ownerInput').value = ''; closeResults(); $('ownerInput').focus();
+    });
+    box.append(btn);
+  });
+  box.classList.add('open');
+}
+
+let ownerDebounce;
+async function onOwnerInput(){
+  const q = $('ownerInput').value.trim();
+  clearTimeout(ownerDebounce);
+  if (q.length < 2) return closeResults();
+  showResultsMessage(t('ownersSearching'));
+  const mySeq = ++ownerSeq;
+  ownerDebounce = setTimeout(async () => {
+    if (!window.api) return;
+    if (!(await askConsent())) return closeResults();
+    let res = await window.api.searchPeople(q);
+    if (!res.ok && res.auth) {
+      setMsg('signin');
+      if (!(await doLogin())) { clearMsg(); return showResultsMessage(t('ownersAuth')); }
+      clearMsg();
+      res = await window.api.searchPeople(q);
+    }
+    if (mySeq !== ownerSeq) return; // a newer query superseded this one
+    if (!res.ok) return showResultsMessage(res.error || t('ownersEmpty'));
+    showResults(res.people || []);
+  }, 250);
+}
+$('ownerInput').addEventListener('input', onOwnerInput);
+document.addEventListener('click', (e) => { if (!e.target.closest('.owners-field')) closeResults(); });
+
+// ---------- sites (history) ----------
+// Sites this app created, plus (below) ones pulled in from SharePoint's own
+// "recent sites" API. There is no delete here — deleting a site isn't
+// offered by this app at all.
+function loadHistory(){ try { return JSON.parse(localStorage.getItem('teamHistory') || '[]'); } catch { return []; } }
+function saveHistory(list){ try { localStorage.setItem('teamHistory', JSON.stringify(list.slice(0, 200))); } catch {} }
+function addHistory(entry){
+  // Drop any existing record(s) for this same URL first. Without this, a
+  // site that gets deleted and later recreated at the same URL (SharePoint
+  // reuses the URL once the old group is gone) ends up with its *original*
+  // stale creation date stuck in history forever — ghost-detection never
+  // catches it, because the URL resolves fine again once the new site
+  // exists, so it's never seen as "gone" and removed.
+  const list = loadHistory().filter((e) => e.url !== entry.url);
+  list.unshift(entry);
+  saveHistory(list);
+}
+function removeHistory(url){ saveHistory(loadHistory().filter((e) => e.url !== url)); }
+const normalizeUrl = (u) => (u || '').replace(/\/$/, '').toLowerCase();
+
+// Manually-confirmed sync status (kept separate from the two site sources
+// above, since it applies to any site URL, app-created or not). Nothing
+// writes to this any more — clicking Sync can't actually confirm OneDrive
+// did anything (see the click handler below) — but it's still read, in case
+// an earlier version of the app already wrote entries here.
+function loadSynced(){ try { return new Set(JSON.parse(localStorage.getItem('syncedSites') || '[]')); } catch { return new Set(); } }
+
+function aliasFromUrl(url){
+  try { const u = new URL(url); const segs = u.pathname.split('/').filter(Boolean); return segs[segs.length - 1] || u.hostname; }
+  catch { return url; }
+}
+
+// Sites from SharePoint's "recent sites" insights API — a supplement to the
+// app-created list above, loaded once per launch and cached here. null means
+// "not loaded yet" (so renderHistory doesn't briefly show an empty list).
+let recentSites = null;
+async function ensureRecentSites(){
+  if (recentSites !== null || !window.api) return;
+  let res = await window.api.listRecentSites();
+  if (!res.ok && res.auth) {
+    if (!(await askConsent())) { recentSites = []; return; }
+    if (!(await doLogin())) { recentSites = []; return; }
+    res = await window.api.listRecentSites();
+  }
+  recentSites = res.ok ? res.sites : [];
+  renderHistory();
+}
+
+// Ghost-site detection: sites surfaced via "recent sites" can be stale (the
+// site was deleted some other way since). A lightweight existence check
+// catches that and drops the entry from the list — and if it was being
+// tracked locally too, stops tracking it so it doesn't keep coming back.
+// Map<normalizedUrl, 'checking' | 'exists' | 'gone' | 'error'>
+const existsCache = new Map();
+function ensureExists(url){
+  const key = normalizeUrl(url);
+  if (!url || existsCache.has(key) || !window.api) return;
+  existsCache.set(key, 'checking');
+  (async () => {
+    let res = await window.api.checkSiteExists({ siteUrl: url });
+    if (!res.ok && res.auth) {
+      if (!(await doLogin())) { existsCache.set(key, 'error'); renderHistory(); return; }
+      res = await window.api.checkSiteExists({ siteUrl: url });
+    }
+    if (res.ok) existsCache.set(key, res.exists ? 'exists' : 'gone');
+    else existsCache.set(key, 'error');
+    renderHistory();
+  })();
+}
+
+// Best-effort local heuristic for "already synced outside this app" (no
+// official API exists for this) — layered on top of the manual syncedSites
+// set this app maintains for syncs started from its own button.
+// Map<normalizedUrl, boolean> — only ever holds a *resolved* result; while a
+// check is in flight the key simply isn't in here yet (tracked separately in
+// syncHeuristicInFlight), rather than being set to a placeholder "checking"
+// value. This matters for the periodic re-check below: re-running a check
+// must NOT make the key briefly disappear from this map, or every sync
+// button on screen would flicker invisible for the few seconds each round of
+// rechecks takes, which is what was happening before.
+const syncHeuristicCache = new Map();
+const syncHeuristicInFlight = new Set();
+function ensureSyncHeuristic(url, num, title, alias, force){
+  const key = normalizeUrl(url);
+  if (!url || !window.api) return;
+  if (!force && syncHeuristicCache.has(key)) return;
+  if (syncHeuristicInFlight.has(key)) return;
+  syncHeuristicInFlight.add(key);
+  (async () => {
+    const res = await window.api.checkSynced({ num, title, alias });
+    syncHeuristicInFlight.delete(key);
+    const next = !!(res.ok && res.synced);
+    const changed = syncHeuristicCache.get(key) !== next;
+    syncHeuristicCache.set(key, next);
+    if (changed) renderHistory();
+  })();
+}
+
+// Tracks what's currently on screen (set at the top of renderHistory) so the
+// periodic re-check below knows which sites to re-verify.
+let lastRenderedList = [];
+
+// Periodically re-check sync status while the Sites tab is open, so a site
+// that gets unsynced externally (folder deleted, OneDrive "Stop syncing"
+// used outside this app, etc.) has its sync button reappear on its own,
+// instead of only ever re-checking on tab switch or right after a sync
+// click. Deliberately does NOT clear syncHeuristicCache first — each site's
+// existing (possibly stale) result stays displayed, and its sync button
+// stays exactly as it was, until that one site's fresh check actually
+// resolves and the result differs, at which point only that one re-renders.
+setInterval(() => {
+  if (!$('viewHistory').classList.contains('active')) return;
+  for (const e of lastRenderedList) {
+    ensureSyncHeuristic(e.url, e.num, e.displayName, e.alias, true);
+  }
+}, 20000);
+
+function iconButton(cls, svg, title, onClick, disabled){
+  const b = document.createElement('button'); b.type = 'button'; b.className = 'icon-btn ' + cls;
+  b.innerHTML = svg; b.title = title; b.setAttribute('aria-label', title);
+  if (disabled) b.disabled = true; else b.addEventListener('click', onClick);
+  return b;
+}
+
+function renderHistory(){
+  // Dedupe by URL, keeping only the first (= most recent, since addHistory
+  // unshifts) occurrence — cleans up any stale duplicate already sitting in
+  // localStorage from before addHistory started preventing new ones.
+  const seenUrls = new Set();
+  const own = loadHistory().filter((e) => {
+    const key = normalizeUrl(e.url);
+    if (!key || seenUrls.has(key)) return !key; // keep entries with no url (pending creates) as-is
+    seenUrls.add(key);
+    return true;
+  });
+  const ownUrls = new Set(own.map((e) => normalizeUrl(e.url)));
+  // Sites only known from "recent sites" have no known creation date
+  // (alias shown instead); ownership/groupId for these is resolved the same
+  // way as for app-created sites, below.
+  const extra = (recentSites || [])
+    .filter((s) => !ownUrls.has(normalizeUrl(s.url)))
+    .map((s) => ({ displayName: s.title || aliasFromUrl(s.url), alias: aliasFromUrl(s.url), url: s.url, date: null }));
+  const list = own.concat(extra);
+  const manualSynced = loadSynced();
+  lastRenderedList = list;
+
+  $('histEmpty').style.display = list.length ? 'none' : '';
+  const box = $('histList'); box.textContent = '';
+  list.forEach((e) => {
+    const item = document.createElement('div'); item.className = 'hist-item';
+    const main = document.createElement('div'); main.className = 'hist-main';
+    const title = document.createElement('div'); title.className = 'hist-title'; title.textContent = e.displayName;
+    const meta = document.createElement('div'); meta.className = 'hist-meta';
+
+    ensureExists(e.url);
+    ensureSyncHeuristic(e.url, e.num, e.displayName, e.alias);
+    const key = normalizeUrl(e.url);
+
+    // Always shows the alias rather than a creation timestamp — a locally
+    // saved date can't tell a recreated site from the one it was first
+    // recorded for, and the app has no reliable way to tell the two apart,
+    // so every entry (app-created or from "recent sites") is shown the same
+    // consistent way.
+    meta.textContent = e.alias;
+    main.append(title, meta);
+
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;gap:6px;align-items:center';
+    if (existsCache.get(key) === 'gone') {
+      // Confirmed gone (404) — drop it from the list; if it was one this app
+      // tracked locally, also stop tracking it so it doesn't keep coming back.
+      removeHistory(e.url);
+      return;
+    }
+    const heuristicSynced = syncHeuristicCache.get(key);
+    const isSynced = manualSynced.has(key) || heuristicSynced === true;
+    // Don't show the button at all until the local-folder check has actually
+    // finished for this site (heuristicSynced is still undefined on first
+    // render, since the check is async) — otherwise it flashes into view and
+    // then disappears a moment later once the check resolves. Once settled,
+    // periodic rechecks (above) update this cache in place without ever
+    // clearing it first, so the button no longer flickers away during them.
+    const checkSettled = manualSynced.has(key) || heuristicSynced === true || heuristicSynced === false;
+
+    if (!isSynced && checkSettled) {
+      actions.append(iconButton('sync', ICON_SYNC, t('syncTitle'), async () => {
+        if (!window.api) return;
+        const res = await window.api.syncSite({ siteUrl: e.url });
+        if (!res.ok) return setMsg('syncFailed', { error: res.error });
+        // res.ok here only means Windows accepted the odopen:// handoff —
+        // not that OneDrive actually understood it or did anything. There's
+        // no way to confirm that from here, so the button is deliberately
+        // NOT hidden on click any more (it used to be, which was misleading
+        // when the link silently failed). It'll only disappear once the
+        // local-folder heuristic actually detects the synced folder, on a
+        // later render — which needs its cached "not synced" result thrown
+        // out first (it was cached once already, before this click, and
+        // otherwise would never be re-checked for the rest of this session).
+        // OneDrive also takes a few seconds to actually create the folder,
+        // so this retries a few times rather than just once right away.
+        setMsg('syncLaunched');
+        [4000, 10000, 20000].forEach((delay) => setTimeout(() => {
+          syncHeuristicCache.delete(key);
+          renderHistory();
+        }, delay));
+      }));
+    }
+
+    const openBtn = document.createElement('button'); openBtn.type = 'button'; openBtn.className = 'hist-open';
+    if (e.url) { openBtn.textContent = t('histOpen'); openBtn.addEventListener('click', () => window.api && window.api.open(e.url)); }
+    else { openBtn.textContent = t('histPending'); openBtn.disabled = true; }
+    actions.append(openBtn);
+
+    item.append(main, actions); box.append(item);
+  });
+}
+
+// ---------- submit ----------
+async function submit(e){
+  e.preventDefault();
+  if (!window.api) return setMsg('noApi', { cls: 'err' });
+  const n = names();
+  if (!/^\d{3}$/.test(n.num)) return setMsg('errNum', { cls: 'err' });
+  if (!n.title) return setMsg('errTitle', { cls: 'err' });
+  if (!cleanTitle(n.title)) return setMsg('errAlias', { cls: 'err' });
+  $('go').disabled = true; applyLang(); clearMsg();
+  const ownerEmails = owners.map((o) => o.email);
+  try {
+    if (!(await askConsent())) return setMsg('signinFail', { cls: 'err' });
+    let res = await window.api.create({ displayName: n.displayName, alias: n.alias, owners: ownerEmails });
+    if (!res.ok && res.auth) {
+      setMsg('signin');
+      if (!(await doLogin())) return setMsg('signinFail', { cls: 'err' });
+      res = await window.api.create({ displayName: n.displayName, alias: n.alias, owners: ownerEmails });
+    }
+    if (!res.ok) return setMsg('failed', { error: res.error });
+    if (res.status === 4) return setMsg('exists', { cls: 'err' });
+    if (res.status === 3 || res.status === 0) return setMsg('failed', { error: 'SiteStatus ' + res.status });
+    addHistory({ num: n.num, title: n.title, displayName: n.displayName, alias: n.alias, url: res.url || '', groupId: res.groupId || '', date: new Date().toISOString() });
+    setMsg('success', { prov: res.status === 1, url: res.url });
+    owners = []; renderChips();
+  } finally { $('go').disabled = false; applyLang(); }
+}
+
+$('num').addEventListener('input', () => { $('num').value = $('num').value.replace(/\D/g, '').slice(0, 3); preview(); });
+$('ttl').addEventListener('input', preview);
+$('f').addEventListener('submit', submit);
+$('gear').addEventListener('click', () => { const o = $('settings').classList.toggle('open'); $('gear').setAttribute('aria-expanded', o); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('settings').classList.remove('open'); closeResults(); $('consentDecline').click(); } });
+$('lang').addEventListener('change', (e) => { langPref = e.target.value; store.set('lang', langPref); applyLang(); });
+$('theme').addEventListener('change', (e) => { themePref = e.target.value; store.set('theme', themePref); applyTheme(); });
+
+$('lang').value = langPref; $('theme').value = themePref;
+applyTheme(); applyLang(); preview(); renderChips(); renderHistory();
+
+// ---------- startup: ask consent right away, then sign in ----------
+// Sign-in is persisted (same session partition in main.js), so this is a
+// silent no-op on most launches — only a fresh sign-in window pops up when
+// the stored session has actually expired.
+(async () => {
+  if (!window.api) return; // noApi message is only relevant once the user tries to act
+  if (!(await askConsent())) return;
+  setMsg('signin');
+  const check = await window.api.checkAuth();
+  if (check.ok) { clearMsg(); return; }
+  if (!(await doLogin())) { setMsg('signinFail', { cls: 'err' }); return; }
+  clearMsg();
+})();
+</script>
+</body>
+</html>
