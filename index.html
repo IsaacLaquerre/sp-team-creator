@@ -40,6 +40,8 @@ button.primary:disabled{opacity:.55;cursor:default}
 #settings .row:last-child{margin-bottom:0}
 #msg{margin-top:16px;min-height:22px;font-size:14px}
 #msg.ok{color:var(--ok)}#msg.err{color:var(--err)}
+#teamifyMsg.err{color:var(--err)}
+#demoteMsg.err{color:var(--err)}
 #msg a{color:inherit;font-weight:600;cursor:pointer;text-decoration:underline}
 #overlay{display:none;position:fixed;inset:0;background:rgba(10,14,18,.55);place-items:center;z-index:10;padding:20px}
 #overlay.open{display:grid}
@@ -60,7 +62,7 @@ button.primary:disabled{opacity:.55;cursor:default}
 .view{display:none}
 .view.active{display:block}
 
-.owners-field{position:relative}
+.owners-field,.members-field{position:relative}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
 .chips:empty{margin-bottom:0}
 .chip{display:flex;align-items:center;gap:6px;background:var(--field);border:1px solid var(--line);border-radius:999px;padding:4px 6px 4px 10px;font-size:13px}
@@ -116,10 +118,16 @@ button.primary:disabled{opacity:.55;cursor:default}
           <input id="ttl" autocomplete="off" placeholder="Pont de Québec (tablier)"></div>
       </div>
       <div class="row owners-field">
-        <label for="ownerInput"><span data-i="owners"></span> <span class="hint" data-i="ownersHint"></span></label>
+        <label for="ownerInput"><span data-i="owners"></span></label>
         <div class="chips" id="ownerChips"></div>
         <input id="ownerInput" autocomplete="off">
         <div id="ownerResults" role="listbox"></div>
+      </div>
+      <div class="row members-field">
+        <label for="memberInput"><span data-i="members"></span></label>
+        <div class="chips" id="memberChips"></div>
+        <input id="memberInput" autocomplete="off">
+        <div id="memberResults" role="listbox"></div>
       </div>
       <div class="preview">
         <div><span data-i="teamName"></span><b id="pName">—</b></div>
@@ -127,6 +135,8 @@ button.primary:disabled{opacity:.55;cursor:default}
       </div>
       <button class="primary" id="go" type="submit"></button>
       <div id="msg" role="status" aria-live="polite"></div>
+      <div id="teamifyMsg" role="status" aria-live="polite" class="hist-meta" style="margin-top:4px"></div>
+      <div id="demoteMsg" role="status" aria-live="polite" class="hist-meta" style="margin-top:4px"></div>
     </form>
   </div>
 
@@ -171,12 +181,14 @@ const S = {
     consentItem3Title:"Lit l’annuaire", consentItem3:"consulte la liste des utilisateurs de votre organisation (nom, courriel) pour suggérer des propriétaires.",
     consentAgree:"J’accepte et je continue", consentDecline:"Annuler",
     createTab:"Créer", sitesTab:"Sites",
-    owners:"Propriétaires", ownersHint:"(en plus de vous-même)",
+    owners:"Propriétaires", members:"Membres",
     ownersSearching:"Recherche…", ownersEmpty:"Aucun résultat.", ownersAuth:"Connexion requise pour chercher des utilisateurs.",
     historyEmpty:"Aucun site créé pour l’instant.",
     histOpen:"Ouvrir le site", histPending:"Site en cours de création",
     syncTitle:"Synchroniser avec OneDrive", syncFailed:"Échec de la synchronisation : ",
-    syncLaunched:"Demande envoyée à OneDrive — vérifiez si une fenêtre OneDrive s’est ouverte. Rien ne garantit que la synchronisation a réellement démarré." },
+    syncLaunched:"Demande envoyée à OneDrive — vérifiez si une fenêtre OneDrive s’est ouverte. Rien ne garantit que la synchronisation a réellement démarré.",
+    teamifyWorking:"Ajout du clavardage d’équipe en temps réel…", teamifyOk:"Clavardage d’équipe ajouté.", teamifyFail:"Impossible d’ajouter le clavardage d’équipe : ",
+    demoteWorking:"Ajustement de votre rôle…", demoteOk:"Vous êtes maintenant membre plutôt que propriétaire.", demoteFail:"Impossible d’ajuster votre rôle : " },
   en: { heading:"Create a project team", number:"Number", title:"Project title",
     teamName:"Team name", alias:"Site address (alias)", create:"Create team", creating:"Creating…",
     language:"Language", theme:"Theme", system:"System", light:"Light", dark:"Dark", settings:"Settings",
@@ -191,12 +203,14 @@ const S = {
     consentItem3Title:"Read the directory", consentItem3:"look up your organization's users (name, email) to suggest owners.",
     consentAgree:"I agree, continue", consentDecline:"Cancel",
     createTab:"Create", sitesTab:"Sites",
-    owners:"Owners", ownersHint:"(besides yourself)",
+    owners:"Owners", members:"Members",
     ownersSearching:"Searching…", ownersEmpty:"No results.", ownersAuth:"Sign-in needed to search people.",
     historyEmpty:"No sites created yet.",
     histOpen:"Open site", histPending:"Site still provisioning",
     syncTitle:"Sync with OneDrive", syncFailed:"Sync failed: ",
-    syncLaunched:"Request sent to OneDrive — check whether a OneDrive window opened. There's no way to confirm from here that syncing actually started." },
+    syncLaunched:"Request sent to OneDrive — check whether a OneDrive window opened. There's no way to confirm from here that syncing actually started.",
+    teamifyWorking:"Adding real-time team chat…", teamifyOk:"Team chat added.", teamifyFail:"Couldn't add team chat: ",
+    demoteWorking:"Adjusting your role…", demoteOk:"You're now a member instead of an owner.", demoteFail:"Couldn't adjust your role: " },
 };
 const $ = (id) => document.getElementById(id);
 const store = { get:(k) => { try { return localStorage.getItem(k) || 'system'; } catch { return 'system'; } },
@@ -223,14 +237,8 @@ function showTab(name){
   $('viewCreate').classList.toggle('active', isCreate);
   $('viewHistory').classList.toggle('active', !isCreate);
   if (!isCreate) {
-    // Re-check sync status fresh every time this tab is opened, instead of
-    // only trusting the short retry window right after clicking Sync —
-    // OneDrive can take well over that window to actually finish creating
-    // the folder, and once a "not synced" result was cached, nothing was
-    // ever re-checking it again for the rest of the session. A confirmed
-    // "synced" (true) result is kept, since that's not going to un-happen.
-    for (const [key, val] of syncHeuristicCache) { if (val !== true) syncHeuristicCache.delete(key); }
-    renderHistory();
+    renderHistory(); // shows last known states instantly, no flicker
+    recheckAllSynced(); // background refresh, only re-renders sites whose result actually changed
     ensureRecentSites();
   }
 }
@@ -249,13 +257,10 @@ function preview(){ const n = names(); $('pName').textContent = n.title || n.num
 
 function say(html, cls){ const m = $('msg'); m.className = cls || ''; m.textContent = ''; if (typeof html === 'string') m.textContent = html; else m.append(html); }
 
-// The #msg area remembers *what* it's showing, not just the rendered text,
-// so switching language re-translates whatever is currently displayed
-// (including success/error states), instead of freezing at the language
-// that was active when the message first appeared.
+// #msg remembers what it's showing, so a language switch re-translates it.
 let msgState = null; // { kind: 'key'|'failed'|'success', ...details } or null
 function setMsg(kind, opts){ msgState = { kind, ...(opts || {}) }; renderMsg(); }
-function clearMsg(){ msgState = null; say('', ''); }
+function clearMsg(){ msgState = null; say('', ''); const tm = $('teamifyMsg'); if (tm) { tm.textContent = ''; tm.className = 'hist-meta'; } const dm = $('demoteMsg'); if (dm) { dm.textContent = ''; dm.className = 'hist-meta'; } }
 function renderMsg(){
   if (!msgState) return say('', '');
   if (msgState.kind === 'success') {
@@ -270,20 +275,39 @@ function renderMsg(){
   }
   if (msgState.kind === 'failed') return say(t('failed') + msgState.error, 'err');
   if (msgState.kind === 'syncFailed') return say(t('syncFailed') + msgState.error, 'err');
-  // Plain translated key. msgState.cls is '' for neutral status text (e.g. "signin")
-  // and 'err' for error states — set explicitly by each caller below.
-  say(t(msgState.kind), msgState.cls || '');
+  say(t(msgState.kind), msgState.cls || ''); // cls: '' neutral, 'err' error
+}
+
+// Runs after creation, with its own status line separate from #msg.
+function teamifyInBackground(siteUrl){
+  const el = $('teamifyMsg');
+  if (!siteUrl || !window.api) { el.textContent = ''; return; }
+  el.textContent = t('teamifyWorking'); el.className = 'hist-meta';
+  (async () => {
+    const res = await window.api.teamifyGroup({ siteUrl });
+    if (res.ok) { el.textContent = t('teamifyOk'); el.className = 'hist-meta'; }
+    else { el.textContent = t('teamifyFail') + res.error; el.className = 'hist-meta err'; }
+  })();
+}
+
+// Drops members, and self unless a default owner, to Member role.
+function demoteAfterCreate(siteUrl, groupId, memberEmails){
+  const el = $('demoteMsg');
+  if (!siteUrl || !groupId || !window.api) { if (el) el.textContent = ''; return; }
+  el.textContent = t('demoteWorking'); el.className = 'hist-meta';
+  (async () => {
+    const res = await window.api.demoteAfterCreate({
+      siteUrl, groupId, memberEmails,
+      protectedEmails: DEFAULT_OWNERS.map((o) => o.email),
+    });
+    if (res.ok) { el.textContent = t('demoteOk'); el.className = 'hist-meta'; }
+    else { el.textContent = t('demoteFail') + res.error; el.className = 'hist-meta err'; }
+  })();
 }
 
 // ---------- consent gate ----------
-// The app must not sign in or call window.api.login() until the user has
-// actively agreed in this dialog — no auto-consent, no silent retry on their
-// behalf. Consent is remembered locally so it is asked once, but can be
-// revoked by clearing app data.
-// Several places can discover at roughly the same moment that the session
-// needs a fresh sign-in (every site tile checking ownership on tab-open, for
-// instance). Without this, each one would open its own sign-in popup at
-// once; this makes them all await the same single login attempt instead.
+// Requires explicit consent before sign-in, remembered locally. Shares one
+// loginPromise across simultaneous callers.
 let loginPromise = null;
 function doLogin(){
   if (!window.api) return Promise.resolve(false);
@@ -304,86 +328,95 @@ function askConsent(){
   });
 }
 
-// ---------- owners: search + chips ----------
-let owners = []; // { name, email }
-let ownerSeq = 0;
-
-function renderChips(){
-  const box = $('ownerChips');
-  box.textContent = '';
-  owners.forEach((o, i) => {
-    const chip = document.createElement('span'); chip.className = 'chip';
-    const label = document.createElement('span'); label.textContent = o.name || o.email;
-    const rm = document.createElement('button'); rm.type = 'button'; rm.textContent = '×'; rm.title = o.email;
-    rm.addEventListener('click', () => { owners.splice(i, 1); renderChips(); });
-    chip.append(label, rm); box.append(chip);
-  });
-}
-
-function closeResults(){ $('ownerResults').classList.remove('open'); $('ownerResults').textContent = ''; }
-function showResultsMessage(text){
-  const box = $('ownerResults');
-  box.textContent = '';
-  const d = document.createElement('div'); d.className = 'result empty'; d.textContent = text;
-  box.append(d); box.classList.add('open');
-}
-function showResults(people){
-  const box = $('ownerResults');
-  box.textContent = '';
-  const fresh = people.filter((p) => !owners.some((o) => o.email.toLowerCase() === p.email.toLowerCase()));
-  if (!fresh.length) return showResultsMessage(t('ownersEmpty'));
-  fresh.forEach((p) => {
-    const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'result';
-    const nm = document.createElement('span'); nm.className = 'rname'; nm.textContent = p.name;
-    const em = document.createElement('span'); em.className = 'remail'; em.textContent = p.email;
-    btn.append(nm, em);
-    btn.addEventListener('click', () => {
-      owners.push(p); renderChips();
-      $('ownerInput').value = ''; closeResults(); $('ownerInput').focus();
+// ---------- people pickers: shared search + chips logic ----------
+// One factory, two instances (owners, members). list is mutated in place.
+function makePicker(list, ids){
+  let seq = 0;
+  function render(){
+    const box = $(ids.chips);
+    box.textContent = '';
+    list.forEach((p, i) => {
+      const chip = document.createElement('span'); chip.className = 'chip';
+      const label = document.createElement('span'); label.textContent = p.name || p.email;
+      const rm = document.createElement('button'); rm.type = 'button'; rm.textContent = '×'; rm.title = p.email;
+      rm.addEventListener('click', () => { list.splice(i, 1); render(); });
+      chip.append(label, rm); box.append(chip);
     });
-    box.append(btn);
-  });
-  box.classList.add('open');
+  }
+  function closeResults(){ $(ids.results).classList.remove('open'); $(ids.results).textContent = ''; }
+  function showResultsMessage(text){
+    const box = $(ids.results);
+    box.textContent = '';
+    const d = document.createElement('div'); d.className = 'result empty'; d.textContent = text;
+    box.append(d); box.classList.add('open');
+  }
+  function showResults(people){
+    const box = $(ids.results);
+    box.textContent = '';
+    const fresh = people.filter((p) => !list.some((o) => o.email.toLowerCase() === p.email.toLowerCase()));
+    if (!fresh.length) return showResultsMessage(t('ownersEmpty'));
+    fresh.forEach((p) => {
+      const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'result';
+      const nm = document.createElement('span'); nm.className = 'rname'; nm.textContent = p.name;
+      const em = document.createElement('span'); em.className = 'remail'; em.textContent = p.email;
+      btn.append(nm, em);
+      btn.addEventListener('click', () => {
+        list.push(p); render();
+        $(ids.input).value = ''; closeResults(); $(ids.input).focus();
+      });
+      box.append(btn);
+    });
+    box.classList.add('open');
+  }
+  let debounce;
+  async function onInput(){
+    const q = $(ids.input).value.trim();
+    clearTimeout(debounce);
+    if (q.length < 2) return closeResults();
+    showResultsMessage(t('ownersSearching'));
+    const mySeq = ++seq;
+    debounce = setTimeout(async () => {
+      if (!window.api) return;
+      if (!(await askConsent())) return closeResults();
+      let res = await window.api.searchPeople(q);
+      if (!res.ok && res.auth) {
+        setMsg('signin');
+        if (!(await doLogin())) { clearMsg(); return showResultsMessage(t('ownersAuth')); }
+        clearMsg();
+        res = await window.api.searchPeople(q);
+      }
+      if (mySeq !== seq) return; // a newer query superseded this one
+      if (!res.ok) return showResultsMessage(res.error || t('ownersEmpty'));
+      showResults(res.people || []);
+    }, 250);
+  }
+  $(ids.input).addEventListener('input', onInput);
+  document.addEventListener('click', (e) => { if (!e.target.closest('.' + ids.field)) closeResults(); });
+  return { render, closeResults };
 }
 
-let ownerDebounce;
-async function onOwnerInput(){
-  const q = $('ownerInput').value.trim();
-  clearTimeout(ownerDebounce);
-  if (q.length < 2) return closeResults();
-  showResultsMessage(t('ownersSearching'));
-  const mySeq = ++ownerSeq;
-  ownerDebounce = setTimeout(async () => {
-    if (!window.api) return;
-    if (!(await askConsent())) return closeResults();
-    let res = await window.api.searchPeople(q);
-    if (!res.ok && res.auth) {
-      setMsg('signin');
-      if (!(await doLogin())) { clearMsg(); return showResultsMessage(t('ownersAuth')); }
-      clearMsg();
-      res = await window.api.searchPeople(q);
-    }
-    if (mySeq !== ownerSeq) return; // a newer query superseded this one
-    if (!res.ok) return showResultsMessage(res.error || t('ownersEmpty'));
-    showResults(res.people || []);
-  }, 250);
-}
-$('ownerInput').addEventListener('input', onOwnerInput);
-document.addEventListener('click', (e) => { if (!e.target.closest('.owners-field')) closeResults(); });
+// Pre-filled on every new team. Removable via the chip's x button.
+const DEFAULT_OWNERS = [
+  { email: 'edionne@stellaireconstruction.com' },
+  { email: 'sdionne@stellaireconstruction.com' },
+  { email: 'cdionne@stellaireconstruction.com' },
+  { email: 'claquerre@stellaireconstruction.com' },
+  { email: 'vlamontagne@stellaireconstruction.com' },
+];
+let owners = DEFAULT_OWNERS.map((o) => ({ ...o })); // { name, email }
+let members = []; // added as plain members, not owners
+
+const ownersPicker = makePicker(owners, { chips: 'ownerChips', input: 'ownerInput', results: 'ownerResults', field: 'owners-field' });
+const membersPicker = makePicker(members, { chips: 'memberChips', input: 'memberInput', results: 'memberResults', field: 'members-field' });
+function renderChips(){ ownersPicker.render(); membersPicker.render(); }
+function closeAllResults(){ ownersPicker.closeResults(); membersPicker.closeResults(); }
 
 // ---------- sites (history) ----------
-// Sites this app created, plus (below) ones pulled in from SharePoint's own
-// "recent sites" API. There is no delete here — deleting a site isn't
-// offered by this app at all.
+// App-created sites, plus (below) ones pulled from SharePoint's "recent sites" API.
 function loadHistory(){ try { return JSON.parse(localStorage.getItem('teamHistory') || '[]'); } catch { return []; } }
 function saveHistory(list){ try { localStorage.setItem('teamHistory', JSON.stringify(list.slice(0, 200))); } catch {} }
 function addHistory(entry){
-  // Drop any existing record(s) for this same URL first. Without this, a
-  // site that gets deleted and later recreated at the same URL (SharePoint
-  // reuses the URL once the old group is gone) ends up with its *original*
-  // stale creation date stuck in history forever — ghost-detection never
-  // catches it, because the URL resolves fine again once the new site
-  // exists, so it's never seen as "gone" and removed.
+  // Drops any existing record for this URL first.
   const list = loadHistory().filter((e) => e.url !== entry.url);
   list.unshift(entry);
   saveHistory(list);
@@ -391,14 +424,7 @@ function addHistory(entry){
 function removeHistory(url){ saveHistory(loadHistory().filter((e) => e.url !== url)); }
 const normalizeUrl = (u) => (u || '').replace(/\/$/, '').toLowerCase();
 
-// An earlier version of the app kept a manually-set "synced" flag here,
-// written the moment the Sync button was clicked — before that was found to
-// be wrong (clicking Sync can't actually confirm OneDrive did anything; see
-// the click handler below). Nothing has written to this key in a long time,
-// but a leftover true entry from back then would silently and permanently
-// override the live heuristic check for that one site, hiding its sync
-// button forever even once it's genuinely not synced — which is exactly
-// what was happening. Removed outright, and any leftover data is cleared.
+// One-time cleanup of an old "synced" flag. No longer written.
 try { localStorage.removeItem('syncedSites'); } catch {}
 
 function aliasFromUrl(url){
@@ -406,9 +432,7 @@ function aliasFromUrl(url){
   catch { return url; }
 }
 
-// Sites from SharePoint's "recent sites" insights API — a supplement to the
-// app-created list above, loaded once per launch and cached here. null means
-// "not loaded yet" (so renderHistory doesn't briefly show an empty list).
+// Supplement to the app-created list, loaded once per launch. null means not loaded yet.
 let recentSites = null;
 async function ensureRecentSites(){
   if (recentSites !== null || !window.api) return;
@@ -422,10 +446,7 @@ async function ensureRecentSites(){
   renderHistory();
 }
 
-// Ghost-site detection: sites surfaced via "recent sites" can be stale (the
-// site was deleted some other way since). A lightweight existence check
-// catches that and drops the entry from the list — and if it was being
-// tracked locally too, stops tracking it so it doesn't keep coming back.
+// Ghost-site detection: drops stale "recent sites" entries whose site was deleted elsewhere.
 // Map<normalizedUrl, 'checking' | 'exists' | 'gone' | 'error'>
 const existsCache = new Map();
 function ensureExists(url){
@@ -444,16 +465,8 @@ function ensureExists(url){
   })();
 }
 
-// Best-effort local heuristic for "already synced outside this app" (no
-// official API exists for this) — layered on top of the manual syncedSites
-// set this app maintains for syncs started from its own button.
-// Map<normalizedUrl, boolean> — only ever holds a *resolved* result; while a
-// check is in flight the key simply isn't in here yet (tracked separately in
-// syncHeuristicInFlight), rather than being set to a placeholder "checking"
-// value. This matters for the periodic re-check below: re-running a check
-// must NOT make the key briefly disappear from this map, or every sync
-// button on screen would flicker invisible for the few seconds each round of
-// rechecks takes, which is what was happening before.
+// Holds resolved sync-check results. In-flight checks are tracked separately in syncHeuristicInFlight.
+// Map<normalizedUrl, boolean>
 const syncHeuristicCache = new Map();
 const syncHeuristicInFlight = new Set();
 function ensureSyncHeuristic(url, num, title, alias, force){
@@ -463,7 +476,7 @@ function ensureSyncHeuristic(url, num, title, alias, force){
   if (syncHeuristicInFlight.has(key)) return;
   syncHeuristicInFlight.add(key);
   (async () => {
-    const res = await window.api.checkSynced({ num, title, alias });
+    const res = await window.api.checkSynced({ siteUrl: url, num, title, alias });
     syncHeuristicInFlight.delete(key);
     const next = !!(res.ok && res.synced);
     const changed = syncHeuristicCache.get(key) !== next;
@@ -472,24 +485,20 @@ function ensureSyncHeuristic(url, num, title, alias, force){
   })();
 }
 
-// Tracks what's currently on screen (set at the top of renderHistory) so the
-// periodic re-check below knows which sites to re-verify.
+// Sites currently on screen.
 let lastRenderedList = [];
 
-// Periodically re-check sync status while the Sites tab is open, so a site
-// that gets unsynced externally (folder deleted, OneDrive "Stop syncing"
-// used outside this app, etc.) has its sync button reappear on its own,
-// instead of only ever re-checking on tab switch or right after a sync
-// click. Deliberately does NOT clear syncHeuristicCache first — each site's
-// existing (possibly stale) result stays displayed, and its sync button
-// stays exactly as it was, until that one site's fresh check actually
-// resolves and the result differs, at which point only that one re-renders.
-setInterval(() => {
+// Rechecks sync status for sites on screen, updating only those whose result changed.
+function recheckAllSynced(){
   if (!$('viewHistory').classList.contains('active')) return;
   for (const e of lastRenderedList) {
     ensureSyncHeuristic(e.url, e.num, e.displayName, e.alias, true);
   }
-}, 20000);
+}
+setInterval(recheckAllSynced, 20000);
+
+// Fires immediately when main.js's file watcher sees a change.
+if (window.api && window.api.onSyncSettingsChanged) window.api.onSyncSettingsChanged(recheckAllSynced);
 
 function iconButton(cls, svg, title, onClick, disabled){
   const b = document.createElement('button'); b.type = 'button'; b.className = 'icon-btn ' + cls;
@@ -499,9 +508,7 @@ function iconButton(cls, svg, title, onClick, disabled){
 }
 
 function renderHistory(){
-  // Dedupe by URL, keeping only the first (= most recent, since addHistory
-  // unshifts) occurrence — cleans up any stale duplicate already sitting in
-  // localStorage from before addHistory started preventing new ones.
+  // Dedupes by URL, keeping the first occurrence.
   const seenUrls = new Set();
   const own = loadHistory().filter((e) => {
     const key = normalizeUrl(e.url);
@@ -510,9 +517,7 @@ function renderHistory(){
     return true;
   });
   const ownUrls = new Set(own.map((e) => normalizeUrl(e.url)));
-  // Sites only known from "recent sites" have no known creation date
-  // (alias shown instead); ownership/groupId for these is resolved the same
-  // way as for app-created sites, below.
+  // "recent sites" entries have no known creation date (alias shown instead).
   const extra = (recentSites || [])
     .filter((s) => !ownUrls.has(normalizeUrl(s.url)))
     .map((s) => ({ displayName: s.title || aliasFromUrl(s.url), alias: aliasFromUrl(s.url), url: s.url, date: null }));
@@ -531,30 +536,20 @@ function renderHistory(){
     ensureSyncHeuristic(e.url, e.num, e.displayName, e.alias);
     const key = normalizeUrl(e.url);
 
-    // Always shows the alias rather than a creation timestamp — a locally
-    // saved date can't tell a recreated site from the one it was first
-    // recorded for, and the app has no reliable way to tell the two apart,
-    // so every entry (app-created or from "recent sites") is shown the same
-    // consistent way.
+    // Shows the alias, never a timestamp.
     meta.textContent = e.alias;
     main.append(title, meta);
 
     const actions = document.createElement('div');
     actions.style.cssText = 'display:flex;gap:6px;align-items:center';
     if (existsCache.get(key) === 'gone') {
-      // Confirmed gone (404) — drop it from the list; if it was one this app
-      // tracked locally, also stop tracking it so it doesn't keep coming back.
+      // Drops a confirmed-gone (404) site from the list.
       removeHistory(e.url);
       return;
     }
     const heuristicSynced = syncHeuristicCache.get(key);
     const isSynced = heuristicSynced === true;
-    // Don't show the button at all until the local-folder check has actually
-    // finished for this site (heuristicSynced is still undefined on first
-    // render, since the check is async) — otherwise it flashes into view and
-    // then disappears a moment later once the check resolves. Once settled,
-    // periodic rechecks (above) update this cache in place without ever
-    // clearing it first, so the button no longer flickers away during them.
+    // Button stays hidden until the sync check resolves.
     const checkSettled = heuristicSynced === true || heuristicSynced === false;
 
     if (!isSynced && checkSettled) {
@@ -562,17 +557,7 @@ function renderHistory(){
         if (!window.api) return;
         const res = await window.api.syncSite({ siteUrl: e.url });
         if (!res.ok) return setMsg('syncFailed', { error: res.error });
-        // res.ok here only means Windows accepted the odopen:// handoff —
-        // not that OneDrive actually understood it or did anything. There's
-        // no way to confirm that from here, so the button is deliberately
-        // NOT hidden on click any more (it used to be, which was misleading
-        // when the link silently failed). It'll only disappear once the
-        // local-folder heuristic actually detects the synced folder, on a
-        // later render — which needs its cached "not synced" result thrown
-        // out first (it was cached once already, before this click, and
-        // otherwise would never be re-checked for the rest of this session).
-        // OneDrive also takes a few seconds to actually create the folder,
-        // so this retries a few times rather than just once right away.
+        // Retries the sync check a few times.
         setMsg('syncLaunched');
         [4000, 10000, 20000].forEach((delay) => setTimeout(() => {
           syncHeuristicCache.delete(key);
@@ -600,20 +585,27 @@ async function submit(e){
   if (!cleanTitle(n.title)) return setMsg('errAlias', { cls: 'err' });
   $('go').disabled = true; applyLang(); clearMsg();
   const ownerEmails = owners.map((o) => o.email);
+  const memberEmails = members.map((o) => o.email);
+  // Members are added as Owners here, then demoted after creation.
+  const allEmails = [...new Set([...ownerEmails, ...memberEmails])];
   try {
     if (!(await askConsent())) return setMsg('signinFail', { cls: 'err' });
-    let res = await window.api.create({ displayName: n.displayName, alias: n.alias, owners: ownerEmails });
+    let res = await window.api.create({ displayName: n.displayName, alias: n.alias, owners: allEmails });
     if (!res.ok && res.auth) {
       setMsg('signin');
       if (!(await doLogin())) return setMsg('signinFail', { cls: 'err' });
-      res = await window.api.create({ displayName: n.displayName, alias: n.alias, owners: ownerEmails });
+      res = await window.api.create({ displayName: n.displayName, alias: n.alias, owners: allEmails });
     }
     if (!res.ok) return setMsg('failed', { error: res.error });
     if (res.status === 4) return setMsg('exists', { cls: 'err' });
     if (res.status === 3 || res.status === 0) return setMsg('failed', { error: 'SiteStatus ' + res.status });
     addHistory({ num: n.num, title: n.title, displayName: n.displayName, alias: n.alias, url: res.url || '', groupId: res.groupId || '', date: new Date().toISOString() });
     setMsg('success', { prov: res.status === 1, url: res.url });
-    owners = []; renderChips();
+    teamifyInBackground(res.url);
+    demoteAfterCreate(res.url, res.groupId, memberEmails);
+    owners.length = 0; owners.push(...DEFAULT_OWNERS.map((o) => ({ ...o })));
+    members.length = 0;
+    renderChips();
   } finally { $('go').disabled = false; applyLang(); }
 }
 
@@ -621,7 +613,7 @@ $('num').addEventListener('input', () => { $('num').value = $('num').value.repla
 $('ttl').addEventListener('input', preview);
 $('f').addEventListener('submit', submit);
 $('gear').addEventListener('click', () => { const o = $('settings').classList.toggle('open'); $('gear').setAttribute('aria-expanded', o); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('settings').classList.remove('open'); closeResults(); $('consentDecline').click(); } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('settings').classList.remove('open'); closeAllResults(); $('consentDecline').click(); } });
 $('lang').addEventListener('change', (e) => { langPref = e.target.value; store.set('lang', langPref); applyLang(); });
 $('theme').addEventListener('change', (e) => { themePref = e.target.value; store.set('theme', themePref); applyTheme(); });
 
@@ -629,9 +621,7 @@ $('lang').value = langPref; $('theme').value = themePref;
 applyTheme(); applyLang(); preview(); renderChips(); renderHistory();
 
 // ---------- startup: ask consent right away, then sign in ----------
-// Sign-in is persisted (same session partition in main.js), so this is a
-// silent no-op on most launches — only a fresh sign-in window pops up when
-// the stored session has actually expired.
+// Pops up a sign-in window only if the stored session has expired.
 (async () => {
   if (!window.api) return; // noApi message is only relevant once the user tries to act
   if (!(await askConsent())) return;

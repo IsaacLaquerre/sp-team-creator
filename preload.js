@@ -9,4 +9,7 @@ contextBridge.exposeInMainWorld('api', {
   listRecentSites: () => ipcRenderer.invoke('listRecentSites'),
   checkSiteExists: (d) => ipcRenderer.invoke('checkSiteExists', d),
   checkSynced: (d) => ipcRenderer.invoke('checkSynced', d),
+  teamifyGroup: (d) => ipcRenderer.invoke('teamifyGroup', d),
+  demoteAfterCreate: (d) => ipcRenderer.invoke('demoteAfterCreate', d),
+  onSyncSettingsChanged: (cb) => ipcRenderer.on('oneDriveSettingsChanged', cb),
 });
