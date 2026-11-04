@@ -106,6 +106,8 @@ ipcMain.handle('demoteAfterCreate', async (_e, { siteUrl, groupId, memberEmails,
 // installs on next quit. GITHUB_UPDATE_TOKEN is a fine-grained PAT scoped
 // to this repo only, Contents: Read-only.
 const GITHUB_UPDATE_TOKEN = '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';
+const GITHUB_OWNER = 'IsaacLaquerre';
+const GITHUB_REPO = 'sp-team-creator';
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
 autoUpdater.allowPrerelease = true; // TEMPORARY, remove for stable releases
@@ -116,10 +118,9 @@ autoUpdater.channel = 'latest';
 if (GITHUB_UPDATE_TOKEN) autoUpdater.requestHeaders = { authorization: `token ${GITHUB_UPDATE_TOKEN}` };
 autoUpdater.on('error', (err) => console.log('[autoUpdater] error:', err && err.message));
 
-const pub = require('./package.json').build.publish;
 autoUpdater.on('update-downloaded', (info) => {
   const version = info && info.version;
-  const url = `https://github.com/${pub.owner}/${pub.repo}/releases/tag/v${version}`;
+  const url = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tag/v${version}`;
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('updateReady', { version, url });
 });
 
