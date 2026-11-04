@@ -12,4 +12,7 @@ contextBridge.exposeInMainWorld('api', {
   teamifyGroup: (d) => ipcRenderer.invoke('teamifyGroup', d),
   demoteAfterCreate: (d) => ipcRenderer.invoke('demoteAfterCreate', d),
   onSyncSettingsChanged: (cb) => ipcRenderer.on('oneDriveSettingsChanged', cb),
+  openExternal: (u) => ipcRenderer.invoke('openExternal', u),
+  quitAndInstall: () => ipcRenderer.invoke('quitAndInstall'),
+  onUpdateReady: (cb) => ipcRenderer.on('updateReady', cb),
 });

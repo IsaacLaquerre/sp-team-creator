@@ -109,12 +109,29 @@ const GITHUB_UPDATE_TOKEN = 'github_pat_11AOM33PI0MU91zWslgAiv_c7p9Y3JAf5NfMhKm0
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
 autoUpdater.allowPrerelease = true; // TEMPORARY, remove for stable releases
+// electron-builder only publishes latest.yml. Without this, electron-updater
+// derives the channel from the version's prerelease tag (e.g. "alpha") and
+// requests alpha.yml instead, which is never published.
+autoUpdater.channel = 'latest';
 if (GITHUB_UPDATE_TOKEN) autoUpdater.requestHeaders = { authorization: `token ${GITHUB_UPDATE_TOKEN}` };
 autoUpdater.on('error', (err) => console.log('[autoUpdater] error:', err && err.message));
+
+const pub = require('./package.json').build.publish;
+autoUpdater.on('update-downloaded', (info) => {
+  const version = info && info.version;
+  const url = `https://github.com/${pub.owner}/${pub.repo}/releases/tag/v${version}`;
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('updateReady', { version, url });
+});
+
 function checkForUpdates() {
   if (!app.isPackaged) return;
   autoUpdater.checkForUpdates().catch((err) => console.log('[autoUpdater] check failed:', err && err.message));
 }
+
+ipcMain.handle('quitAndInstall', () => autoUpdater.quitAndInstall());
+ipcMain.handle('openExternal', (_e, url) => {
+  try { if (new URL(url).origin === 'https://github.com') shell.openExternal(url); } catch {}
+});
 
 let mainWindow = null;
 app.whenReady().then(() => {
