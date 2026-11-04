@@ -391,12 +391,15 @@ function addHistory(entry){
 function removeHistory(url){ saveHistory(loadHistory().filter((e) => e.url !== url)); }
 const normalizeUrl = (u) => (u || '').replace(/\/$/, '').toLowerCase();
 
-// Manually-confirmed sync status (kept separate from the two site sources
-// above, since it applies to any site URL, app-created or not). Nothing
-// writes to this any more — clicking Sync can't actually confirm OneDrive
-// did anything (see the click handler below) — but it's still read, in case
-// an earlier version of the app already wrote entries here.
-function loadSynced(){ try { return new Set(JSON.parse(localStorage.getItem('syncedSites') || '[]')); } catch { return new Set(); } }
+// An earlier version of the app kept a manually-set "synced" flag here,
+// written the moment the Sync button was clicked — before that was found to
+// be wrong (clicking Sync can't actually confirm OneDrive did anything; see
+// the click handler below). Nothing has written to this key in a long time,
+// but a leftover true entry from back then would silently and permanently
+// override the live heuristic check for that one site, hiding its sync
+// button forever even once it's genuinely not synced — which is exactly
+// what was happening. Removed outright, and any leftover data is cleared.
+try { localStorage.removeItem('syncedSites'); } catch {}
 
 function aliasFromUrl(url){
   try { const u = new URL(url); const segs = u.pathname.split('/').filter(Boolean); return segs[segs.length - 1] || u.hostname; }
@@ -514,7 +517,6 @@ function renderHistory(){
     .filter((s) => !ownUrls.has(normalizeUrl(s.url)))
     .map((s) => ({ displayName: s.title || aliasFromUrl(s.url), alias: aliasFromUrl(s.url), url: s.url, date: null }));
   const list = own.concat(extra);
-  const manualSynced = loadSynced();
   lastRenderedList = list;
 
   $('histEmpty').style.display = list.length ? 'none' : '';
@@ -546,14 +548,14 @@ function renderHistory(){
       return;
     }
     const heuristicSynced = syncHeuristicCache.get(key);
-    const isSynced = manualSynced.has(key) || heuristicSynced === true;
+    const isSynced = heuristicSynced === true;
     // Don't show the button at all until the local-folder check has actually
     // finished for this site (heuristicSynced is still undefined on first
     // render, since the check is async) — otherwise it flashes into view and
     // then disappears a moment later once the check resolves. Once settled,
     // periodic rechecks (above) update this cache in place without ever
     // clearing it first, so the button no longer flickers away during them.
-    const checkSettled = manualSynced.has(key) || heuristicSynced === true || heuristicSynced === false;
+    const checkSettled = heuristicSynced === true || heuristicSynced === false;
 
     if (!isSynced && checkSettled) {
       actions.append(iconButton('sync', ICON_SYNC, t('syncTitle'), async () => {

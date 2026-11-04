@@ -1,9 +1,9 @@
 {
   "name": "sp-team-creator",
-  "version": "1.0.0",
-  "description": "Create SharePoint team sites from a project number and title",
+  "version": "1.0.1-alpha.2",
+  "description": "Équipe de projet",
   "main": "main.js",
-  "author": "IsaacLaquerre",
+  "author": "Isaac",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --win",
@@ -18,7 +18,7 @@
   },
   "build": {
     "appId": "com.consstellaire.sp-team-creator",
-    "productName": "Equipes de projet",
+    "productName": "Équipe de projet",
     "files": ["main.js", "preload.js", "index.html", "package.json", "assets/**/*"],
     "icon": "assets/icon.ico",
     "win": { "target": ["nsis"], "icon": "assets/icon.ico" },
@@ -26,7 +26,8 @@
       "provider": "github",
       "owner": "IsaacLaquerre",
       "repo": "sp-team-creator",
-      "private": true
+      "private": true,
+      "releaseType": "prerelease"
     }
   }
 }

@@ -30,9 +30,15 @@ const sp = () => session.fromPartition(PARTITION);
 // GitHub repo public instead (nothing secret lives in this app's source —
 // sign-in is interactive per user) and removing this token plus
 // "private": true in package.json.
-const GITHUB_UPDATE_TOKEN = ''; // <-- fine-grained, read-only, single-repo PAT goes here
+const GITHUB_UPDATE_TOKEN = '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';
 autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
+// TEMPORARY, while shipping alpha builds (versions like "1.0.1-alpha.1"):
+// explicitly accept prerelease versions, so alpha installs keep picking up
+// newer alphas. Remove this line (or set it to false) once you're back to
+// shipping plain stable versions — otherwise a stable install could later
+// pick up an alpha build by mistake.
+autoUpdater.allowPrerelease = true;
 if (GITHUB_UPDATE_TOKEN) autoUpdater.requestHeaders = { authorization: `token ${GITHUB_UPDATE_TOKEN}` };
 autoUpdater.on('error', (err) => console.log('[autoUpdater] error:', err && err.message));
 function checkForUpdates() {
@@ -54,7 +60,18 @@ app.whenReady().then(() => {
   win.loadFile('index.html');
   checkForUpdates();
 });
-app.on('window-all-closed', () => app.quit());
+app.on('window-all-closed', () => {
+  app.quit();
+  // Safety net: electron-updater's background update check can leave an
+  // open network handle that keeps Node's event loop alive even after
+  // app.quit() runs, which silently prevents the process from actually
+  // exiting (the window disappears, but electron.exe stays in Task
+  // Manager). If the app hasn't actually terminated shortly after a normal
+  // quit, force it — this only ever fires if something is still hanging
+  // around; a clean quit finishes well before this timeout and the process
+  // is already gone by the time it would run.
+  setTimeout(() => app.exit(0), 1500);
+});
 
 // Electron only writes a cookie to disk (so it survives the app being fully
 // closed and relaunched) if the cookie itself has an expiration date. Most of
