@@ -7,21 +7,20 @@ const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
 const { autoUpdater } = require('electron-updater');
 
-// Strips the Electron and app tokens so Microsoft sign-in sees a plain Chrome user agent.
+// Strips the Electron and app tokens from the user agent.
 app.userAgentFallback = app.userAgentFallback.replace(/ (Electron|sp-team-creator|Équipe de projet)\/\S+/g, '');
 
 const TENANT = 'https://consstellaire.sharepoint.com';
 const PARTITION = 'persist:sharepoint'; // keeps your Microsoft sign-in between launches
 const sp = () => session.fromPartition(PARTITION);
-// Fetches without following redirects. A redirect means an expired session, so it is reported
-// as a 401 instead of hitting Microsoft login, which locks sign-in after too many hits (AADSTS50196).
+// Fetches without following redirects. Returns a 401 on a redirect.
 const spFetch = async (url, opts = {}) => {
   const unauth = () => new Response(null, { status: 401 });
   try {
     const r = await sp().fetch(url, { ...opts, redirect: 'manual' });
     return r.status >= 300 && r.status < 400 ? unauth() : r;
   } catch (e) {
-    if (/redirect/i.test(e && e.message)) return unauth(); // Electron throws on a blocked redirect
+    if (/redirect/i.test(e && e.message)) return unauth();
     throw e;
   }
 };
@@ -220,9 +219,11 @@ app.whenReady().then(() => {
   mainWindow = win;
   win.setMenuBarVisibility(false);
   win.loadFile('index.html');
+  watchSessionCookies();
   checkForUpdates();
 });
-app.on('window-all-closed', () => {
+app.on('window-all-closed', async () => {
+  try { await sp().cookies.flushStore(); } catch {}
   app.quit();
   setTimeout(() => app.exit(0), 1500); // force-quits if still running
 });
@@ -230,36 +231,52 @@ app.on('window-all-closed', () => {
 const cookieUrl = (c) => `http${c.secure ? 's' : ''}://${c.domain.replace(/^\./, '')}${c.path}`;
 const isSharePointCookie = (c) => /(^|\.)sharepoint\.com$/i.test(c.domain);
 
-// Gives SharePoint session cookies a far-future expiration so they persist to disk between launches.
-// Microsoft login cookies are left alone, persisting them breaks later sign-ins.
-// Host-only cookies are set without a domain, passing one would create a duplicate domain cookie.
+// Gives SharePoint session cookies a 90 day expiration. Host-only cookies are set without a domain.
+function persistCookie(c) {
+  const farFuture = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 90; // 90 days
+  return sp().cookies.set({
+    url: cookieUrl(c), name: c.name, value: c.value, path: c.path,
+    ...(c.hostOnly ? {} : { domain: c.domain }),
+    secure: c.secure, httpOnly: c.httpOnly, sameSite: c.sameSite || 'unspecified',
+    expirationDate: farFuture,
+  }).catch(() => {});
+}
 async function persistSessionCookies() {
   try {
     const cookies = await sp().cookies.get({});
-    const farFuture = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 90; // 90 days
-    await Promise.all(cookies.filter((c) => c.session && isSharePointCookie(c)).map((c) => {
-      return sp().cookies.set({
-        url: cookieUrl(c), name: c.name, value: c.value, path: c.path,
-        ...(c.hostOnly ? {} : { domain: c.domain }),
-        secure: c.secure, httpOnly: c.httpOnly, sameSite: c.sameSite || 'unspecified',
-        expirationDate: farFuture,
-      }).catch(() => {});
-    }));
+    await Promise.all(cookies.filter((c) => c.session && isSharePointCookie(c)).map(persistCookie));
   } catch {}
 }
 
-// Clears every cookie in the sign-in partition. Stale SharePoint or Microsoft cookies cause
-// a redirect loop after MFA that Microsoft blocks with AADSTS50196.
-async function clearAllCookies() {
-  try { await sp().clearStorageData({ storages: ['cookies'] }); } catch {}
+// Persists SharePoint session cookies 2s after their last change.
+function watchSessionCookies() {
+  let timer;
+  sp().cookies.on('changed', (_e, c) => {
+    if (!isSharePointCookie(c)) return;
+    clearTimeout(timer);
+    timer = setTimeout(persistSessionCookies, 2000);
+  });
 }
 
-// Opens a Microsoft 365 sign-in window.
-ipcMain.handle('login', () => clearAllCookies().then(() => new Promise((resolve) => {
-  const w = new BrowserWindow({ width: 520, height: 720, title: 'SharePoint', webPreferences: { partition: PARTITION } });
+// Microsoft session cookies cleared before sign-in.
+const STALE_MS_COOKIES = new Set(['ESTSAUTH', 'ESTSAUTHLIGHT', 'x-ms-gateway-slice', 'stsservicecookie']);
+
+// Clears SharePoint cookies and STALE_MS_COOKIES. Keeps ESTSAUTHPERSISTENT.
+async function clearStaleCookies() {
+  try {
+    const cookies = await sp().cookies.get({});
+    const stale = cookies.filter((c) => isSharePointCookie(c) || STALE_MS_COOKIES.has(c.name));
+    await Promise.all(stale.map((c) => sp().cookies.remove(cookieUrl(c), c.name).catch(() => {})));
+  } catch {}
+}
+
+// Opens a Microsoft 365 sign-in window, hidden for the first 3s.
+ipcMain.handle('login', () => clearStaleCookies().then(() => new Promise((resolve) => {
+  const w = new BrowserWindow({ width: 520, height: 720, title: 'SharePoint', show: false, webPreferences: { partition: PARTITION } });
   w.setMenuBarVisibility(false);
+  const showTimer = setTimeout(() => { if (!w.isDestroyed()) w.show(); }, 3000);
   let done = false;
-  const finish = (v) => { if (!done) { done = true; if (v) persistSessionCookies().then(() => resolve(v)); else resolve(v); if (!w.isDestroyed()) w.close(); } };
+  const finish = (v) => { if (!done) { done = true; clearTimeout(showTimer); if (v) persistSessionCookies().then(() => resolve(v)); else resolve(v); if (!w.isDestroyed()) w.close(); } };
   w.webContents.on('did-finish-load', () => {
     try { if (new URL(w.webContents.getURL()).origin === TENANT) finish(true); } catch {}
   });
