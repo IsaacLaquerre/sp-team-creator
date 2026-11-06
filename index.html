@@ -254,6 +254,7 @@ function applyLang(){
   $('go').textContent = $('go').disabled ? t('creating') : t('create');
   renderHistory();
   renderMsg();
+  Object.keys(statusState).forEach(renderStatus);
 }
 
 // ---------- tabs ----------
@@ -287,7 +288,17 @@ function say(html, cls){ const m = $('msg'); m.className = cls || ''; m.textCont
 // #msg remembers what it's showing, so a language switch re-translates it.
 let msgState = null; // { kind: 'key'|'failed'|'success', ...details } or null
 function setMsg(kind, opts){ msgState = { kind, ...(opts || {}) }; renderMsg(); }
-function clearMsg(){ msgState = null; say('', ''); const tm = $('teamifyMsg'); if (tm) { tm.textContent = ''; tm.className = 'hist-meta'; } const dm = $('membersMsg'); if (dm) { dm.textContent = ''; dm.className = 'hist-meta'; } }
+function clearMsg(){ msgState = null; say('', ''); setStatus('teamifyMsg', null); setStatus('membersMsg', null); }
+
+// Status lines under #msg. Re-rendered by applyLang.
+const statusState = {};
+function setStatus(id, key, error){ statusState[id] = key ? { key, error } : null; renderStatus(id); }
+function renderStatus(id){
+  const el = $(id); if (!el) return;
+  const s = statusState[id];
+  el.textContent = s ? t(s.key) + (s.error || '') : '';
+  el.className = s && s.error ? 'hist-meta err' : 'hist-meta';
+}
 function renderMsg(){
   if (!msgState) return say('', '');
   if (msgState.kind === 'success') {
@@ -307,25 +318,23 @@ function renderMsg(){
 
 // Runs after creation, with its own status line separate from #msg.
 function teamifyInBackground(siteUrl){
-  const el = $('teamifyMsg');
-  if (!siteUrl || !window.api) { el.textContent = ''; return; }
-  el.textContent = t('teamifyWorking'); el.className = 'hist-meta';
+  if (!siteUrl || !window.api) return setStatus('teamifyMsg', null);
+  setStatus('teamifyMsg', 'teamifyWorking');
   (async () => {
     const res = await window.api.teamifyGroup({ siteUrl });
-    if (res.ok) { el.textContent = t('teamifyOk'); el.className = 'hist-meta'; }
-    else { el.textContent = t('teamifyFail') + res.error; el.className = 'hist-meta err'; }
+    if (res.ok) setStatus('teamifyMsg', 'teamifyOk');
+    else setStatus('teamifyMsg', 'teamifyFail', res.error || '?');
   })();
 }
 
 // Adds members to the group after creation.
 function addMembersAfterCreate(siteUrl, groupId, memberList){
-  const el = $('membersMsg');
-  if (!memberList.length || !groupId || !window.api) { if (el) el.textContent = ''; return; }
-  el.textContent = t('membersWorking'); el.className = 'hist-meta';
+  if (!memberList.length || !groupId || !window.api) return setStatus('membersMsg', null);
+  setStatus('membersMsg', 'membersWorking');
   (async () => {
     const res = await window.api.addMembers({ siteUrl, groupId, members: memberList });
-    if (res.ok) { el.textContent = t('membersOk'); el.className = 'hist-meta'; }
-    else { el.textContent = t('membersFail') + res.error; el.className = 'hist-meta err'; }
+    if (res.ok) setStatus('membersMsg', 'membersOk');
+    else setStatus('membersMsg', 'membersFail', res.error || '?');
   })();
 }
 
