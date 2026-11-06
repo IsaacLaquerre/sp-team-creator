@@ -208,14 +208,39 @@ ipcMain.handle('openExternal', (_e, url) => {
   try { if (new URL(url).origin === 'https://github.com') shell.openExternal(url); } catch {}
 });
 
+// Saved window size, position and maximized state.
+const WINDOW_STATE_FILE = path.join(app.getPath('userData'), 'window-state.json');
+function loadWindowState() {
+  try {
+    const s = JSON.parse(fs.readFileSync(WINDOW_STATE_FILE, 'utf8'));
+    if (!(s.width > 0 && s.height > 0)) return null;
+    // Drops the position if under 100px of the window is on any display.
+    const onScreen = Number.isFinite(s.x) && Number.isFinite(s.y) && screen.getAllDisplays().some(({ workArea: a }) =>
+      Math.min(s.x + s.width, a.x + a.width) - Math.max(s.x, a.x) >= 100 &&
+      Math.min(s.y + s.height, a.y + a.height) - Math.max(s.y, a.y) >= 100);
+    if (!onScreen) { delete s.x; delete s.y; }
+    return s;
+  } catch { return null; }
+}
+function saveWindowState(win) {
+  try {
+    const { x, y, width, height } = win.getNormalBounds();
+    fs.writeFileSync(WINDOW_STATE_FILE, JSON.stringify({ x, y, width, height, maximized: win.isMaximized() }));
+  } catch {}
+}
+
 let mainWindow = null;
 app.whenReady().then(() => {
   const { height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+  const saved = loadWindowState();
   const win = new BrowserWindow({
     width: 600, height: Math.round(screenHeight * 0.9), minWidth: 420, minHeight: 480,
+    ...(saved ? { width: saved.width, height: saved.height, x: saved.x, y: saved.y } : {}),
     icon: path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true },
   });
+  if (saved && saved.maximized) win.maximize();
+  win.on('close', () => saveWindowState(win));
   mainWindow = win;
   win.setMenuBarVisibility(false);
   win.loadFile('index.html');

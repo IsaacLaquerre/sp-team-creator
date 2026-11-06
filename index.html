@@ -120,6 +120,17 @@ button.primary:disabled{opacity:.55;cursor:default}
 .hist-item:hover .icon-btn.pin,.icon-btn.pin:focus-visible,.icon-btn.pin.on{visibility:visible}
 .icon-btn.pin.on{color:var(--accent);border-color:var(--accent)}
 .icon-btn.pin:hover{border-color:var(--accent)}
+
+/* Wide layout: both panels side by side as cards, no tabs. 1134px viewport is about a 1150px window. */
+@media (min-width:1134px){
+  body{height:100vh;overflow:hidden}
+  main{max-width:1000px;height:calc(100vh - 60px);background:none;border:0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start}
+  .tabs{display:none}
+  .view,.view.active{display:block;max-height:100%;overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:28px}
+  #viewCreate h1{padding-right:0}
+  #gear{position:fixed;top:16px;right:16px;z-index:4}
+  #settings{position:fixed;top:56px;right:16px;z-index:4}
+}
 </style>
 </head>
 <body>
@@ -302,6 +313,11 @@ function showTab(name){
 }
 $('tabCreateBtn').addEventListener('click', () => showTab('create'));
 $('tabHistoryBtn').addEventListener('click', () => showTab('history'));
+
+// Matches the wide layout media query. Both panels are visible there.
+const wideLayout = matchMedia('(min-width:1134px)');
+const sitesVisible = () => wideLayout.matches || $('viewHistory').classList.contains('active');
+wideLayout.addEventListener('change', () => { if (wideLayout.matches) { renderHistory(); recheckAllSynced(); ensureRecentSites(); } });
 
 // ---------- naming rules ----------
 // The title keeps only letters, digits and underscores (accents are flattened: é → e).
@@ -574,7 +590,7 @@ let lastRenderedList = [];
 
 // Rechecks sync status for sites on screen, updating only those whose result changed.
 function recheckAllSynced(){
-  if (!$('viewHistory').classList.contains('active')) return;
+  if (!sitesVisible()) return;
   for (const e of lastRenderedList) {
     ensureSyncHeuristic(e.url, e.num, e.displayName, e.alias, true);
   }
@@ -784,9 +800,9 @@ applyTheme(); applyLang(); preview(); renderChips(); renderHistory();
   if (!(await askConsent())) return;
   setMsg('signin');
   const check = await window.api.checkAuth();
-  if (check.ok) { clearMsg(); return; }
-  if (!(await doLogin())) { setMsg('signinFail', { cls: 'err' }); return; }
+  if (!check.ok && !(await doLogin())) { setMsg('signinFail', { cls: 'err' }); return; }
   clearMsg();
+  if (wideLayout.matches) { recheckAllSynced(); ensureRecentSites(); } // Sites panel is already visible
 })();
 </script>
 </body>
