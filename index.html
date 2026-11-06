@@ -41,7 +41,7 @@ button.primary:disabled{opacity:.55;cursor:default}
 #msg{margin-top:16px;min-height:22px;font-size:14px}
 #msg.ok{color:var(--ok)}#msg.err{color:var(--err)}
 #teamifyMsg.err{color:var(--err)}
-#demoteMsg.err{color:var(--err)}
+#membersMsg.err{color:var(--err)}
 #msg a{color:inherit;font-weight:600;cursor:pointer;text-decoration:underline}
 #overlay{display:none;position:fixed;inset:0;background:rgba(10,14,18,.55);place-items:center;z-index:10;padding:20px}
 #overlay.open{display:grid}
@@ -147,7 +147,7 @@ button.primary:disabled{opacity:.55;cursor:default}
       <button class="primary" id="go" type="submit"></button>
       <div id="msg" role="status" aria-live="polite"></div>
       <div id="teamifyMsg" role="status" aria-live="polite" class="hist-meta" style="margin-top:4px"></div>
-      <div id="demoteMsg" role="status" aria-live="polite" class="hist-meta" style="margin-top:4px"></div>
+      <div id="membersMsg" role="status" aria-live="polite" class="hist-meta" style="margin-top:4px"></div>
     </form>
   </div>
 
@@ -211,7 +211,7 @@ const S = {
     syncTitle:"Synchroniser avec OneDrive", syncFailed:"Échec de la synchronisation : ",
     syncLaunched:"Demande envoyée à OneDrive — vérifiez si une fenêtre OneDrive s’est ouverte. Rien ne garantit que la synchronisation a réellement démarré.",
     teamifyWorking:"Ajout du clavardage d’équipe en temps réel…", teamifyOk:"Clavardage d’équipe ajouté.", teamifyFail:"Impossible d’ajouter le clavardage d’équipe : ",
-    demoteWorking:"Ajustement de votre rôle…", demoteOk:"Vous êtes maintenant membre plutôt que propriétaire.", demoteFail:"Impossible d’ajuster votre rôle : ",
+    membersWorking:"Ajout des membres…", membersOk:"Membres ajoutés.", membersFail:"Impossible d’ajouter certains membres : ",
     updateTitle:"Mise à jour prête", updateBody:"La version {v} a été téléchargée. L’application va redémarrer pour l’installer.",
     updateLink:"Voir la publication sur GitHub", updateLater:"Plus tard", updateRestart:"Redémarrer maintenant" },
   en: { heading:"Create a project team", number:"Number", title:"Project title",
@@ -235,7 +235,7 @@ const S = {
     syncTitle:"Sync with OneDrive", syncFailed:"Sync failed: ",
     syncLaunched:"Request sent to OneDrive — check whether a OneDrive window opened. There's no way to confirm from here that syncing actually started.",
     teamifyWorking:"Adding real-time team chat…", teamifyOk:"Team chat added.", teamifyFail:"Couldn't add team chat: ",
-    demoteWorking:"Adjusting your role…", demoteOk:"You're now a member instead of an owner.", demoteFail:"Couldn't adjust your role: ",
+    membersWorking:"Adding members…", membersOk:"Members added.", membersFail:"Couldn't add some members: ",
     updateTitle:"Update ready", updateBody:"Version {v} has been downloaded. The app will restart to install it.",
     updateLink:"View the release on GitHub", updateLater:"Later", updateRestart:"Restart now" },
 };
@@ -287,7 +287,7 @@ function say(html, cls){ const m = $('msg'); m.className = cls || ''; m.textCont
 // #msg remembers what it's showing, so a language switch re-translates it.
 let msgState = null; // { kind: 'key'|'failed'|'success', ...details } or null
 function setMsg(kind, opts){ msgState = { kind, ...(opts || {}) }; renderMsg(); }
-function clearMsg(){ msgState = null; say('', ''); const tm = $('teamifyMsg'); if (tm) { tm.textContent = ''; tm.className = 'hist-meta'; } const dm = $('demoteMsg'); if (dm) { dm.textContent = ''; dm.className = 'hist-meta'; } }
+function clearMsg(){ msgState = null; say('', ''); const tm = $('teamifyMsg'); if (tm) { tm.textContent = ''; tm.className = 'hist-meta'; } const dm = $('membersMsg'); if (dm) { dm.textContent = ''; dm.className = 'hist-meta'; } }
 function renderMsg(){
   if (!msgState) return say('', '');
   if (msgState.kind === 'success') {
@@ -317,18 +317,15 @@ function teamifyInBackground(siteUrl){
   })();
 }
 
-// Drops members, and self unless a default owner, to Member role.
-function demoteAfterCreate(siteUrl, groupId, memberEmails){
-  const el = $('demoteMsg');
-  if (!siteUrl || !groupId || !window.api) { if (el) el.textContent = ''; return; }
-  el.textContent = t('demoteWorking'); el.className = 'hist-meta';
+// Adds members to the group after creation.
+function addMembersAfterCreate(siteUrl, groupId, memberList){
+  const el = $('membersMsg');
+  if (!memberList.length || !groupId || !window.api) { if (el) el.textContent = ''; return; }
+  el.textContent = t('membersWorking'); el.className = 'hist-meta';
   (async () => {
-    const res = await window.api.demoteAfterCreate({
-      siteUrl, groupId, memberEmails,
-      protectedEmails: DEFAULT_OWNERS.map((o) => o.email),
-    });
-    if (res.ok) { el.textContent = t('demoteOk'); el.className = 'hist-meta'; }
-    else { el.textContent = t('demoteFail') + res.error; el.className = 'hist-meta err'; }
+    const res = await window.api.addMembers({ siteUrl, groupId, members: memberList });
+    if (res.ok) { el.textContent = t('membersOk'); el.className = 'hist-meta'; }
+    else { el.textContent = t('membersFail') + res.error; el.className = 'hist-meta err'; }
   })();
 }
 
@@ -621,16 +618,18 @@ async function submit(e){
   if (!cleanTitle(n.title)) return setMsg('errAlias', { cls: 'err' });
   $('go').disabled = true; applyLang(); clearMsg();
   const ownerEmails = owners.map((o) => o.email);
-  const memberEmails = members.map((o) => o.email);
-  // Members are added as Owners here, then demoted after creation.
-  const allEmails = [...new Set([...ownerEmails, ...memberEmails])];
+  // Skips members who are also owners.
+  const ownerSet = new Set(ownerEmails.map((e) => e.toLowerCase()));
+  const memberList = members
+    .filter((m) => !ownerSet.has(m.email.toLowerCase()))
+    .map((m) => ({ email: m.email, key: m.key || '' }));
   try {
     if (!(await askConsent())) return setMsg('signinFail', { cls: 'err' });
-    let res = await window.api.create({ displayName: n.displayName, alias: n.alias, owners: allEmails });
+    let res = await window.api.create({ displayName: n.displayName, alias: n.alias, owners: ownerEmails });
     if (!res.ok && res.auth) {
       setMsg('signin');
       if (!(await doLogin())) return setMsg('signinFail', { cls: 'err' });
-      res = await window.api.create({ displayName: n.displayName, alias: n.alias, owners: allEmails });
+      res = await window.api.create({ displayName: n.displayName, alias: n.alias, owners: ownerEmails });
     }
     if (!res.ok) return setMsg('failed', { error: res.error });
     if (res.status === 4) return setMsg('exists', { cls: 'err' });
@@ -638,7 +637,7 @@ async function submit(e){
     addHistory({ num: n.num, title: n.title, displayName: n.displayName, alias: n.alias, url: res.url || '', groupId: res.groupId || '', date: new Date().toISOString() });
     setMsg('success', { prov: res.status === 1, url: res.url });
     teamifyInBackground(res.url);
-    demoteAfterCreate(res.url, res.groupId, memberEmails);
+    addMembersAfterCreate(res.url, res.groupId, memberList);
     owners.length = 0; owners.push(...DEFAULT_OWNERS.map((o) => ({ ...o })));
     members.length = 0;
     renderChips();

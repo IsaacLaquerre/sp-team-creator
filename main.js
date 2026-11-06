@@ -62,7 +62,7 @@ ipcMain.handle('teamifyGroup', async (_e, { siteUrl }) => {
   return { ok: false, auth: !!lastErr.auth, error: lastErr.message };
 });
 
-// Removes memberEmails from the group's Owners, matched by mail.
+// Unused. Removes memberEmails from the group's Owners, matched by mail.
 // Self demotion is commented out below.
 ipcMain.handle('demoteAfterCreate', async (_e, { siteUrl, groupId, memberEmails, protectedEmails }) => {
   if (!siteUrl || !groupId) return { ok: false, error: 'Missing site or group.' };
@@ -116,6 +116,64 @@ ipcMain.handle('demoteAfterCreate', async (_e, { siteUrl, groupId, memberEmails,
   } catch (e) {
     return { ok: false, error: e.message };
   }
+});
+
+// Gets a user's Entra object ID from their user profile.
+async function getObjectId({ email, key }) {
+  const claim = key && key.includes('|') ? key : `i:0#.f|membership|${email}`;
+  const r = await spFetch(
+    `${TENANT}/_api/SP.UserProfiles.PeopleManager/GetPropertiesFor(accountName=@v)?@v='${encodeURIComponent(claim.replace(/'/g, "''"))}'`,
+    { credentials: 'include', headers: { Accept: 'application/json;odata=nometadata' } }
+  );
+  if (r.status === 401 || r.status === 403) throw Object.assign(new Error(`HTTP ${r.status}`), { auth: true });
+  let j; try { j = await r.json(); } catch {}
+  const prop = ((j && j.UserProfileProperties) || []).find((p) => p.Key === 'msOnline-ObjectId');
+  return (prop && prop.Value) || null;
+}
+
+// Adds members to the group's Members, with retries. Falls back to the tenant root without a site URL.
+ipcMain.handle('addMembers', async (_e, { siteUrl, groupId, members }) => {
+  if (!groupId) return { ok: false, error: 'Missing group.' };
+  if (!Array.isArray(members) || !members.length) return { ok: true, added: [] };
+  const base = (siteUrl || TENANT).replace(/\/$/, '');
+  const added = [];
+  let pending = members.map((m) => ({ ...m, error: '' }));
+  try {
+    for (const delay of [0, 4000, 10000, 20000]) {
+      if (delay) await sleep(delay);
+      const digest = await getDigestFor(base);
+      const still = [];
+      for (const m of pending) {
+        try {
+          const oid = m.oid || (m.oid = await getObjectId(m));
+          if (!oid) { m.error = 'user not found'; still.push(m); continue; }
+          const r = await spFetch(
+            `${base}/_api/SP.Directory.DirectorySession/Group('${groupId}')/Members/Add(objectId='${oid}', principalName='')`,
+            {
+              method: 'POST', credentials: 'include',
+              headers: {
+                Accept: 'application/json;odata=verbose',
+                'Content-Type': 'application/json;odata=verbose',
+                'X-RequestDigest': digest,
+              },
+            }
+          );
+          if (r.ok) { added.push(m.email); continue; }
+          if (r.status === 401) throw Object.assign(new Error('Not signed in'), { auth: true });
+          m.error = `HTTP ${r.status}`; still.push(m);
+        } catch (e) {
+          if (e.auth) throw e;
+          m.error = e.message; still.push(m);
+        }
+      }
+      pending = still;
+      if (!pending.length) break;
+    }
+  } catch (e) {
+    return { ok: false, auth: !!e.auth, added, error: e.message };
+  }
+  const failed = pending.map((m) => `${m.email} (${m.error})`);
+  return { ok: !failed.length, added, failed, error: failed.length ? failed.join(', ') : undefined };
 });
 
 // --- Auto-update -----------------------------------------------------------
@@ -231,9 +289,23 @@ ipcMain.handle('checkAuth', async () => {
   } catch (e) { return { ok: false, auth: !!e.auth, error: e.message }; }
 });
 
+// Resolves an email to its UPN. Falls back to the email.
+async function resolveUpn(email, digest) {
+  try {
+    const r = await spFetch(`${TENANT}/_api/web/ensureuser`, {
+      method: 'POST', credentials: 'include',
+      headers: { Accept: 'application/json;odata=nometadata', 'Content-Type': 'application/json;odata=nometadata', 'X-RequestDigest': digest },
+      body: JSON.stringify({ logonName: email }),
+    });
+    const j = await r.json();
+    return j.UserPrincipalName || (j.LoginName || '').split('|').pop() || email;
+  } catch { return email; }
+}
+
 ipcMain.handle('create', async (_e, { displayName, alias, owners }) => {
   try {
     const digest = await getDigest();
+    owners = await Promise.all((Array.isArray(owners) ? owners : []).map((o) => resolveUpn(o, digest)));
     const r = await spFetch(`${TENANT}/_api/GroupSiteManager/CreateGroupEx`, {
       method: 'POST', credentials: 'include',
       headers: {
@@ -344,6 +416,7 @@ ipcMain.handle('searchPeople', async (_e, query) => {
       .map((e) => ({
         name: e.DisplayText || (e.EntityData && e.EntityData.Title) || e.Key,
         email: (e.EntityData && e.EntityData.Email) || (e.IsResolved ? e.Key : ''),
+        key: e.Key || '',
       }))
       .filter((p) => p.email);
     return { ok: true, people };
