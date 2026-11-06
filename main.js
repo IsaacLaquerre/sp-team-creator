@@ -62,22 +62,24 @@ ipcMain.handle('teamifyGroup', async (_e, { siteUrl }) => {
   return { ok: false, auth: !!lastErr.auth, error: lastErr.message };
 });
 
-// Removes memberEmails, and the signed-in user unless in protectedEmails,
-// from the group's Owners. Matches by mail. Response fields are lowercase.
+// Removes memberEmails from the group's Owners, matched by mail.
+// Self demotion is commented out below.
 ipcMain.handle('demoteAfterCreate', async (_e, { siteUrl, groupId, memberEmails, protectedEmails }) => {
   if (!siteUrl || !groupId) return { ok: false, error: 'Missing site or group.' };
   const base = siteUrl.replace(/\/$/, '');
   try {
-    const meRes = await spFetch(`${base}/_api/web/currentuser?$select=Email,UserPrincipalName`, {
-      credentials: 'include',
-      headers: { Accept: 'application/json;odata=nometadata' },
-    });
-    const me = await meRes.json();
-    const myEmail = (me.Email || me.UserPrincipalName || '').toLowerCase();
+    // Self demotion: start
+    // const meRes = await spFetch(`${base}/_api/web/currentuser?$select=Email,UserPrincipalName`, {
+    //   credentials: 'include',
+    //   headers: { Accept: 'application/json;odata=nometadata' },
+    // });
+    // const me = await meRes.json();
+    // const myEmail = (me.Email || me.UserPrincipalName || '').toLowerCase();
+    // const protectedSet = new Set((protectedEmails || []).map((e) => e.toLowerCase()));
+    // Self demotion: end
 
-    const protectedSet = new Set((protectedEmails || []).map((e) => e.toLowerCase()));
     const toDemote = new Set((memberEmails || []).map((e) => e.toLowerCase()));
-    if (myEmail && !protectedSet.has(myEmail)) toDemote.add(myEmail);
+    // if (myEmail && !protectedSet.has(myEmail)) toDemote.add(myEmail); // Self demotion
     if (!toDemote.size) return { ok: true, removed: [] };
 
     const ownersRes = await spFetch(
