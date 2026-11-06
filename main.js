@@ -348,6 +348,27 @@ ipcMain.handle('create', async (_e, { displayName, alias, owners }) => {
   }
 });
 
+// Gets a group site's status. SiteStatus: 0 not found, 1 provisioning, 2 ready, 3 error.
+ipcMain.handle('siteStatus', async (_e, { groupId }) => {
+  try {
+    if (!groupId) return { ok: false, error: 'No group.' };
+    const digest = await getDigest();
+    const r = await spFetch(`${TENANT}/_api/GroupSiteManager/GetSiteStatus`, {
+      method: 'POST', credentials: 'include',
+      headers: { Accept: 'application/json;odata=nometadata', 'Content-Type': 'application/json;odata=nometadata', 'X-RequestDigest': digest },
+      body: JSON.stringify({ groupId }),
+    });
+    const text = await r.text();
+    let j; try { j = JSON.parse(text); } catch {}
+    if (!r.ok || !j) return { ok: false, auth: r.status === 401 || r.status === 403, error: `HTTP ${r.status}` };
+    // Deleted group: SiteStatus 3 with an all-zero GroupId.
+    const gone = j.SiteStatus === 0 || (j.SiteStatus === 3 && /^[0-]+$/.test(j.GroupId || ''));
+    return { ok: true, status: j.SiteStatus, url: j.SiteUrl || '', gone };
+  } catch (e) {
+    return { ok: false, auth: !!e.auth, error: e.message };
+  }
+});
+
 // Site deletion isn't offered.
 
 // Checks whether a site still exists.

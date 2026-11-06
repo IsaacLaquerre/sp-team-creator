@@ -446,6 +446,27 @@ function addHistory(entry){
   saveHistory(list);
 }
 function removeHistory(url){ saveHistory(loadHistory().filter((e) => e.url !== url)); }
+
+// Looks up entries with no URL by group ID, every 10s while provisioning.
+// Fills in the URL when ready, removes the entry when the group is gone.
+const pendingChecked = new Set();
+function resolvePending(entry){
+  if (entry.url || !entry.groupId || pendingChecked.has(entry.groupId) || !window.api) return;
+  pendingChecked.add(entry.groupId);
+  (async () => {
+    const res = await window.api.siteStatus({ groupId: entry.groupId });
+    if (!res.ok) return;
+    const list = loadHistory();
+    if (res.status === 2 && res.url) list.forEach((e) => { if (e.groupId === entry.groupId) e.url = res.url; });
+    else if (res.gone) list.splice(0, list.length, ...list.filter((e) => e.groupId !== entry.groupId));
+    else {
+      if (res.status === 1) setTimeout(() => { pendingChecked.delete(entry.groupId); renderHistory(); }, 10000);
+      return;
+    }
+    saveHistory(list);
+    renderHistory();
+  })();
+}
 const normalizeUrl = (u) => (u || '').replace(/\/$/, '').toLowerCase();
 
 // One-time cleanup of an old "synced" flag. No longer written.
@@ -565,6 +586,7 @@ function renderHistory(){
     const title = document.createElement('div'); title.className = 'hist-title'; title.textContent = e.displayName;
     const meta = document.createElement('div'); meta.className = 'hist-meta';
 
+    resolvePending(e);
     ensureExists(e.url);
     ensureSyncHeuristic(e.url, e.num, e.displayName, e.alias);
     const key = normalizeUrl(e.url);
