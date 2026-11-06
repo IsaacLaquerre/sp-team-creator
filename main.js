@@ -212,7 +212,7 @@ let mainWindow = null;
 app.whenReady().then(() => {
   const { height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
   const win = new BrowserWindow({
-    width: 500, height: Math.round(screenHeight * 0.9), minWidth: 420, minHeight: 480,
+    width: 600, height: Math.round(screenHeight * 0.9), minWidth: 420, minHeight: 480,
     icon: path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true },
   });

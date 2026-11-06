@@ -102,6 +102,24 @@ button.primary:disabled{opacity:.55;cursor:default}
 .icon-btn.danger{color:var(--err);border-color:var(--err)}
 .icon-btn.danger:hover{background:var(--err);color:#fff}
 .icon-btn.sync:hover{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.hist-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 18px}
+.hist-head h1{margin:0;padding-right:0}
+.dd{position:relative}
+.dd-btn{display:inline-flex;align-items:center;gap:6px;font:inherit;font-weight:600;font-size:13px;background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 8px 6px 11px;cursor:pointer;white-space:nowrap}
+.dd-btn svg{width:15px;height:15px;color:var(--mute);transition:transform .15s}
+.dd-btn:hover,.dd-btn[aria-expanded=true]{border-color:var(--accent)}
+.dd-btn[aria-expanded=true] svg{transform:rotate(180deg)}
+.dd-menu{display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:170px;background:var(--card);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:4px;z-index:3}
+.dd-menu.open{display:block}
+.dd-opt{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;font:inherit;font-size:13.5px;background:none;border:0;border-radius:5px;padding:7px 9px;color:var(--ink);cursor:pointer;white-space:nowrap}
+.dd-opt:hover,.dd-opt:focus-visible{background:var(--field);outline:none}
+.dd-opt[aria-selected=true]{color:var(--accent);font-weight:600}
+.dd-opt svg{width:15px;height:15px;visibility:hidden}
+.dd-opt[aria-selected=true] svg{visibility:visible}
+.icon-btn.pin{visibility:hidden}
+.hist-item:hover .icon-btn.pin,.icon-btn.pin:focus-visible,.icon-btn.pin.on{visibility:visible}
+.icon-btn.pin.on{color:var(--accent);border-color:var(--accent)}
+.icon-btn.pin:hover{border-color:var(--accent)}
 </style>
 </head>
 <body>
@@ -152,7 +170,16 @@ button.primary:disabled{opacity:.55;cursor:default}
   </div>
 
   <div id="viewHistory" class="view">
-    <h1 data-i="sitesTab"></h1>
+    <div class="hist-head">
+      <h1 data-i="sitesTab"></h1>
+      <div class="dd">
+        <button id="histSort" type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="histSortMenu">
+          <span id="histSortLabel"></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div id="histSortMenu" class="dd-menu" role="listbox"></div>
+      </div>
+    </div>
     <div id="histEmpty" class="hist-empty" data-i="historyEmpty"></div>
     <div id="histList" class="hist-list"></div>
   </div>
@@ -187,7 +214,8 @@ button.primary:disabled{opacity:.55;cursor:default}
 </div>
 
 <script>
-const ICON_SYNC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>';
+const ICON_PIN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>';
+const ICON_SYNC ='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>';
 
 const S = {
   fr: { heading:"Créer une équipe de projet", number:"Numéro", title:"Titre du projet",
@@ -208,6 +236,7 @@ const S = {
     ownersSearching:"Recherche…", ownersEmpty:"Aucun résultat.", ownersAuth:"Connexion requise pour chercher des utilisateurs.",
     historyEmpty:"Aucun site créé pour l’instant.",
     histOpen:"Ouvrir le site", histPending:"Site en cours de création",
+    sortAsc:"Nom, A → Z", sortDesc:"Nom, Z → A", sortTitle:"Trier les sites", pin:"Épingler en haut", unpin:"Détacher",
     syncTitle:"Synchroniser avec OneDrive", syncFailed:"Échec de la synchronisation : ",
     syncLaunched:"Demande envoyée à OneDrive — vérifiez si une fenêtre OneDrive s’est ouverte. Rien ne garantit que la synchronisation a réellement démarré.",
     teamifyWorking:"Ajout du clavardage d’équipe en temps réel…", teamifyOk:"Clavardage d’équipe ajouté.", teamifyFail:"Impossible d’ajouter le clavardage d’équipe : ",
@@ -232,6 +261,7 @@ const S = {
     ownersSearching:"Searching…", ownersEmpty:"No results.", ownersAuth:"Sign-in needed to search people.",
     historyEmpty:"No sites created yet.",
     histOpen:"Open site", histPending:"Site still provisioning",
+    sortAsc:"Name, A → Z", sortDesc:"Name, Z → A", sortTitle:"Sort sites", pin:"Pin to top", unpin:"Unpin",
     syncTitle:"Sync with OneDrive", syncFailed:"Sync failed: ",
     syncLaunched:"Request sent to OneDrive — check whether a OneDrive window opened. There's no way to confirm from here that syncing actually started.",
     teamifyWorking:"Adding real-time team chat…", teamifyOk:"Team chat added.", teamifyFail:"Couldn't add team chat: ",
@@ -570,7 +600,61 @@ function iconButton(cls, svg, title, onClick, disabled){
   return b;
 }
 
+// Sort direction ('asc' or 'desc') and pinned site URLs, stored locally.
+let histSort = (() => { try { return localStorage.getItem('histSort') === 'desc' ? 'desc' : 'asc'; } catch { return 'asc'; } })();
+let pinned = (() => { try { return new Set(JSON.parse(localStorage.getItem('pinnedSites') || '[]')); } catch { return new Set(); } })();
+function savePinned(){ try { localStorage.setItem('pinnedSites', JSON.stringify([...pinned])); } catch {} }
+function togglePin(key){ if (pinned.has(key)) pinned.delete(key); else pinned.add(key); savePinned(); renderHistory(); }
+// ---------- sort dropdown ----------
+const SORTS = [['asc', 'sortAsc'], ['desc', 'sortDesc']];
+const ICON_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+// Builds the options once, then only updates labels and selection.
+SORTS.forEach(([v]) => {
+  const o = document.createElement('button'); o.type = 'button'; o.className = 'dd-opt'; o.role = 'option'; o.dataset.sort = v;
+  o.append(document.createElement('span')); o.insertAdjacentHTML('beforeend', ICON_CHECK);
+  o.addEventListener('click', () => { setSort(v); closeSortMenu(); $('histSort').focus(); });
+  $('histSortMenu').append(o);
+});
+function renderSortButton(){
+  $('histSortLabel').textContent = t(SORTS.find(([v]) => v === histSort)[1]);
+  $('histSort').title = t('sortTitle');
+  $('histSortMenu').querySelectorAll('.dd-opt').forEach((o) => {
+    o.firstChild.textContent = t(SORTS.find(([v]) => v === o.dataset.sort)[1]);
+    o.setAttribute('aria-selected', String(o.dataset.sort === histSort));
+  });
+}
+function setSort(v){
+  histSort = v;
+  try { localStorage.setItem('histSort', v); } catch {}
+  renderHistory();
+}
+function openSortMenu(){
+  $('histSortMenu').classList.add('open'); $('histSort').setAttribute('aria-expanded', 'true');
+  const sel = $('histSortMenu').querySelector('[aria-selected=true]'); if (sel) sel.focus();
+}
+function closeSortMenu(){ $('histSortMenu').classList.remove('open'); $('histSort').setAttribute('aria-expanded', 'false'); }
+$('histSort').addEventListener('click', () => $('histSortMenu').classList.contains('open') ? closeSortMenu() : openSortMenu());
+$('histSortMenu').addEventListener('keydown', (e) => {
+  const opts = [...$('histSortMenu').querySelectorAll('.dd-opt')];
+  const i = opts.indexOf(document.activeElement);
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); opts[(i + (e.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length].focus(); }
+  else if (e.key === 'Escape') { closeSortMenu(); $('histSort').focus(); }
+  else if (e.key === 'Tab') closeSortMenu();
+});
+document.addEventListener('click', (e) => { if (!e.target.closest('.dd')) closeSortMenu(); });
+
+// Pinned sites first, then by name in the chosen direction.
+function sortSites(list){
+  const dir = histSort === 'desc' ? -1 : 1;
+  return list.slice().sort((a, b) => {
+    const pa = pinned.has(normalizeUrl(a.url)), pb = pinned.has(normalizeUrl(b.url));
+    if (pa !== pb) return pa ? -1 : 1;
+    return dir * (a.displayName || '').localeCompare(b.displayName || '', lang(), { numeric: true, sensitivity: 'base' });
+  });
+}
+
 function renderHistory(){
+  renderSortButton();
   // Dedupes by URL, keeping the first occurrence.
   const seenUrls = new Set();
   const own = loadHistory().filter((e) => {
@@ -584,7 +668,7 @@ function renderHistory(){
   const extra = (recentSites || [])
     .filter((s) => !ownUrls.has(normalizeUrl(s.url)))
     .map((s) => ({ displayName: s.title || aliasFromUrl(s.url), alias: aliasFromUrl(s.url), url: s.url, date: null }));
-  const list = own.concat(extra);
+  const list = sortSites(own.concat(extra));
   lastRenderedList = list;
 
   $('histEmpty').style.display = list.length ? 'none' : '';
@@ -611,6 +695,13 @@ function renderHistory(){
       removeHistory(e.url);
       return;
     }
+    if (key) {
+      const isPinned = pinned.has(key);
+      const pinBtn = iconButton('pin' + (isPinned ? ' on' : ''), ICON_PIN, t(isPinned ? 'unpin' : 'pin'), () => togglePin(key));
+      pinBtn.setAttribute('aria-pressed', String(isPinned));
+      actions.append(pinBtn);
+    }
+
     const heuristicSynced = syncHeuristicCache.get(key);
     const isSynced = heuristicSynced === true;
     // Button stays hidden until the sync check resolves.
