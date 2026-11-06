@@ -175,6 +175,92 @@ ipcMain.handle('addMembers', async (_e, { siteUrl, groupId, members }) => {
   return { ok: !failed.length, added, failed, error: failed.length ? failed.join(', ') : undefined };
 });
 
+// --- Install tracking --------------------------------------------------------
+// Emails that see the installations panel. Each also needs owner rights on the AppVersion site.
+const ADMIN_EMAILS = [
+  'ilaquerre@stellaireconstruction.com',
+];
+const isAdmin = (email) => ADMIN_EMAILS.some((a) => a.toLowerCase() === email);
+const INSTALLS_SITE = `${TENANT}/sites/AppVersion`;
+const INSTALLS_LIST = '/sites/AppVersion/Lists/sp_team_creator';
+const listApi = (p, q = '') => `${INSTALLS_SITE}/_api/web/GetList(@l)${p}?@l='${INSTALLS_LIST}'${q ? '&' + q : ''}`;
+const odataStr = (s) => String(s).replace(/'/g, "''");
+const JSON_NM = 'application/json;odata=nometadata';
+
+// Signed-in user's email and name.
+async function whoAmI() {
+  const r = await spFetch(`${TENANT}/_api/web/currentuser?$select=Email,Title,UserPrincipalName`, { credentials: 'include', headers: { Accept: JSON_NM } });
+  if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status}`), { auth: r.status === 401 || r.status === 403 });
+  const j = await r.json();
+  return { email: (j.Email || j.UserPrincipalName || '').toLowerCase(), name: j.Title || '' };
+}
+ipcMain.handle('whoAmI', async () => {
+  try { const me = await whoAmI(); return { ok: true, ...me, isAdmin: isAdmin(me.email) }; }
+  catch (e) { return { ok: false, auth: !!e.auth, error: e.message }; }
+});
+
+// Maps the list's column display names to internal names, cached.
+let installFieldsCache = null;
+async function installFields() {
+  if (installFieldsCache) return installFieldsCache;
+  const r = await spFetch(listApi('/fields', '$select=InternalName,Title&$filter=Hidden eq false'), { credentials: 'include', headers: { Accept: JSON_NM } });
+  if (!r.ok) throw new Error(`HTTP ${r.status} reading list columns`);
+  const byTitle = {};
+  ((await r.json()).value || []).forEach((f) => { byTitle[f.Title.toLowerCase()] = f.InternalName; });
+  const pick = (title) => byTitle[title.toLowerCase()] || title;
+  installFieldsCache = { userName: pick('UserName'), computer: pick('Computer'), appVersion: pick('AppVersion'), lastSeen: pick('LastSeen') };
+  return installFieldsCache;
+}
+
+// Creates or updates this user's row for this computer.
+ipcMain.handle('reportInstall', async () => {
+  try {
+    const me = await whoAmI();
+    if (!me.email) return { ok: false, error: 'No email.' };
+    const f = await installFields();
+    const computer = os.hostname();
+    const digest = await getDigestFor(INSTALLS_SITE);
+    const find = await spFetch(
+      listApi('/items', `$select=Id&$top=1&$filter=${encodeURIComponent(`Title eq '${odataStr(me.email)}' and ${f.computer} eq '${odataStr(computer)}'`)}`),
+      { credentials: 'include', headers: { Accept: JSON_NM } }
+    );
+    if (!find.ok) return { ok: false, error: `HTTP ${find.status} finding row` };
+    const existing = ((await find.json()).value || [])[0];
+    const body = JSON.stringify({
+      Title: me.email, [f.userName]: me.name, [f.computer]: computer,
+      [f.appVersion]: app.getVersion(), [f.lastSeen]: new Date().toISOString(),
+    });
+    const headers = { Accept: JSON_NM, 'Content-Type': JSON_NM, 'X-RequestDigest': digest };
+    const r = existing
+      ? await spFetch(listApi(`/items(${existing.Id})`), { method: 'POST', credentials: 'include', headers: { ...headers, 'X-HTTP-Method': 'MERGE', 'IF-MATCH': '*' }, body })
+      : await spFetch(listApi('/items'), { method: 'POST', credentials: 'include', headers, body });
+    return r.ok ? { ok: true } : { ok: false, error: `HTTP ${r.status} ${(await r.text()).slice(0, 200)}` };
+  } catch (e) {
+    return { ok: false, auth: !!e.auth, error: e.message };
+  }
+});
+
+// Lists every install row. Admin only.
+ipcMain.handle('listInstalls', async () => {
+  try {
+    const me = await whoAmI();
+    if (!isAdmin(me.email)) return { ok: false, error: 'Not allowed.' };
+    const f = await installFields();
+    const r = await spFetch(
+      listApi('/items', `$select=Title,${f.userName},${f.computer},${f.appVersion},${f.lastSeen}&$top=500&$orderby=Modified desc`),
+      { credentials: 'include', headers: { Accept: JSON_NM } }
+    );
+    if (!r.ok) return { ok: false, auth: r.status === 401, error: `HTTP ${r.status}` };
+    const rows = ((await r.json()).value || []).map((it) => ({
+      email: it.Title || '', name: it[f.userName] || '', computer: it[f.computer] || '',
+      version: it[f.appVersion] || '', lastSeen: it[f.lastSeen] || '',
+    }));
+    return { ok: true, rows, currentVersion: app.getVersion() };
+  } catch (e) {
+    return { ok: false, auth: !!e.auth, error: e.message };
+  }
+});
+
 // --- Auto-update -----------------------------------------------------------
 // Checks GitHub Releases on launch, downloads updates in the background,
 // installs on next quit. GITHUB_UPDATE_TOKEN is a fine-grained PAT scoped

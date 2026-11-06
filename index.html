@@ -62,6 +62,21 @@ button.primary:disabled{opacity:.55;cursor:default}
 #updateDialog h2{margin:0 0 12px;font-size:18px}
 #updateDialog p{margin:0 0 14px;color:var(--mute);font-size:14px}
 #updateLink{display:inline-block;margin-bottom:18px;color:var(--accent);font-size:14px;font-weight:600;cursor:pointer}
+.settings-btn{width:100%;font:inherit;font-weight:600;font-size:13.5px;background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px;cursor:pointer}
+.settings-btn:hover{border-color:var(--accent)}
+#settings .row:has(+ #adminOpen[hidden]){margin-bottom:0}
+#adminOverlay{display:none;position:fixed;inset:0;background:rgba(10,14,18,.55);place-items:center;z-index:11;padding:20px}
+#adminOverlay.open{display:grid}
+#adminDialog{width:100%;max-width:860px;max-height:calc(100vh - 40px);display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:22px}
+.admin-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+.admin-head h2{margin:0;font-size:18px}
+.admin-actions{display:flex;gap:6px}
+.admin-table-wrap{overflow:auto;margin-top:10px;border:1px solid var(--line);border-radius:8px}
+#adminTable{width:100%;border-collapse:collapse;font-size:13px}
+#adminTable th{position:sticky;top:0;background:var(--field);text-align:left;font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+#adminTable td{padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+#adminTable tr:last-child td{border-bottom:0}
+#adminTable td.old{color:var(--err);font-weight:600}
 .update-actions{display:flex;gap:10px}
 .update-actions button{flex:1;font:inherit;font-weight:600;border-radius:6px;padding:10px;cursor:pointer}
 #updateRestart{background:var(--accent);color:var(--accent-ink);border:0}
@@ -141,6 +156,7 @@ button.primary:disabled{opacity:.55;cursor:default}
       <select id="lang"><option value="system" data-i="system"></option><option value="fr">Français</option><option value="en">English</option></select></div>
     <div class="row"><label for="theme" data-i="theme"></label>
       <select id="theme"><option value="system" data-i="system"></option><option value="light" data-i="light"></option><option value="dark" data-i="dark"></option></select></div>
+    <button id="adminOpen" type="button" class="settings-btn" data-i="adminOpen" hidden></button>
   </div>
 
   <div class="tabs">
@@ -212,6 +228,25 @@ button.primary:disabled{opacity:.55;cursor:default}
   </div>
 </div>
 
+<div id="adminOverlay" role="presentation">
+  <div id="adminDialog" role="dialog" aria-modal="true" aria-labelledby="adminTitle">
+    <div class="admin-head">
+      <h2 id="adminTitle" data-i="adminTitle"></h2>
+      <div class="admin-actions">
+        <button id="adminRefresh" type="button" class="dd-btn" data-i="adminRefresh"></button>
+        <button id="adminClose" type="button" class="dd-btn" data-i="adminClose"></button>
+      </div>
+    </div>
+    <div id="adminStatus" class="hist-meta"></div>
+    <div class="admin-table-wrap">
+      <table id="adminTable">
+        <thead><tr><th data-i="adminName"></th><th data-i="adminEmail"></th><th data-i="adminComputer"></th><th data-i="adminVersion"></th><th data-i="adminLastSeen"></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <div id="updateOverlay" role="presentation">
   <div id="updateDialog" role="dialog" aria-modal="true" aria-labelledby="updateTitle">
     <h2 id="updateTitle" data-i="updateTitle"></h2>
@@ -253,7 +288,11 @@ const S = {
     teamifyWorking:"Ajout du clavardage d’équipe en temps réel…", teamifyOk:"Clavardage d’équipe ajouté.", teamifyFail:"Impossible d’ajouter le clavardage d’équipe : ",
     membersWorking:"Ajout des membres…", membersOk:"Membres ajoutés.", membersFail:"Impossible d’ajouter certains membres : ",
     updateTitle:"Mise à jour prête", updateBody:"La version {v} a été téléchargée. L’application va redémarrer pour l’installer.",
-    updateLink:"Voir la publication sur GitHub", updateLater:"Plus tard", updateRestart:"Redémarrer maintenant" },
+    updateLink:"Voir la publication sur GitHub", updateLater:"Plus tard", updateRestart:"Redémarrer maintenant",
+    adminOpen:"Installations", adminTitle:"Installations de l’application", adminRefresh:"Actualiser", adminClose:"Fermer",
+    adminName:"Nom", adminEmail:"Courriel", adminComputer:"Ordinateur", adminVersion:"Version", adminLastSeen:"Dernière activité",
+    adminLoading:"Chargement…", adminEmpty:"Aucune installation signalée pour l’instant.", adminFail:"Impossible de lire la liste : ",
+    adminSummary:"{n} installation(s), {o} à mettre à jour (dernière version : {v})" },
   en: { heading:"Create a project team", number:"Number", title:"Project title",
     teamName:"Team name", alias:"Site address (alias)", create:"Create team", creating:"Creating…",
     language:"Language", theme:"Theme", system:"System", light:"Light", dark:"Dark", settings:"Settings",
@@ -278,7 +317,11 @@ const S = {
     teamifyWorking:"Adding real-time team chat…", teamifyOk:"Team chat added.", teamifyFail:"Couldn't add team chat: ",
     membersWorking:"Adding members…", membersOk:"Members added.", membersFail:"Couldn't add some members: ",
     updateTitle:"Update ready", updateBody:"Version {v} has been downloaded. The app will restart to install it.",
-    updateLink:"View the release on GitHub", updateLater:"Later", updateRestart:"Restart now" },
+    updateLink:"View the release on GitHub", updateLater:"Later", updateRestart:"Restart now",
+    adminOpen:"Installations", adminTitle:"App installations", adminRefresh:"Refresh", adminClose:"Close",
+    adminName:"Name", adminEmail:"Email", adminComputer:"Computer", adminVersion:"Version", adminLastSeen:"Last seen",
+    adminLoading:"Loading…", adminEmpty:"No installs reported yet.", adminFail:"Couldn't read the list: ",
+    adminSummary:"{n} install(s), {o} out of date (latest: {v})" },
 };
 const $ = (id) => document.getElementById(id);
 const store = { get:(k) => { try { return localStorage.getItem(k) || 'system'; } catch { return 'system'; } },
@@ -296,6 +339,7 @@ function applyLang(){
   renderHistory();
   renderMsg();
   Object.keys(statusState).forEach(renderStatus);
+  if (adminData) renderInstalls();
 }
 
 // ---------- tabs ----------
@@ -636,6 +680,66 @@ function showUpdateReady(version, url){
 }
 if (window.api && window.api.onUpdateReady) window.api.onUpdateReady((_e, { version, url }) => showUpdateReady(version, url));
 
+// ---------- installations panel (admins only) ----------
+// Compares "1.0.6-alpha" style versions. A release ranks above its prereleases.
+function compareVersions(a, b){
+  const parse = (v) => { const [n, pre] = String(v || '').split('-'); return { n: n.split('.').map((x) => parseInt(x, 10) || 0), pre: pre || '' }; };
+  const A = parse(a), B = parse(b);
+  for (let i = 0; i < 3; i++) if ((A.n[i] || 0) !== (B.n[i] || 0)) return (A.n[i] || 0) - (B.n[i] || 0);
+  if (A.pre === B.pre) return 0;
+  if (!A.pre) return 1;
+  if (!B.pre) return -1;
+  return A.pre.localeCompare(B.pre, undefined, { numeric: true });
+}
+let adminData = null; // { rows, currentVersion } or { error }
+function renderInstalls(){
+  const body = $('adminTable').tBodies[0]; body.textContent = '';
+  if (!adminData) return;
+  if (adminData.error) { $('adminStatus').textContent = t('adminFail') + adminData.error; $('adminStatus').className = 'hist-meta err'; return; }
+  const rows = adminData.rows.slice();
+  const latest = rows.reduce((m, r) => compareVersions(r.version, m) > 0 ? r.version : m, adminData.currentVersion);
+  rows.sort((a, b) => compareVersions(b.version, a.version) || String(b.lastSeen).localeCompare(String(a.lastSeen)));
+  const old = rows.filter((r) => compareVersions(r.version, latest) < 0).length;
+  $('adminStatus').className = 'hist-meta';
+  $('adminStatus').textContent = rows.length ? t('adminSummary').replace('{n}', rows.length).replace('{o}', old).replace('{v}', latest) : t('adminEmpty');
+  rows.forEach((r) => {
+    const tr = document.createElement('tr');
+    const seen = r.lastSeen ? new Date(r.lastSeen).toLocaleString(lang() === 'fr' ? 'fr-CA' : 'en-CA', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+    [r.name, r.email, r.computer, r.version, seen].forEach((v, i) => {
+      const td = document.createElement('td'); td.textContent = v;
+      if (i === 3 && compareVersions(r.version, latest) < 0) td.className = 'old';
+      tr.append(td);
+    });
+    body.append(tr);
+  });
+}
+async function loadInstalls(){
+  adminData = null; renderInstalls();
+  $('adminStatus').className = 'hist-meta'; $('adminStatus').textContent = t('adminLoading');
+  const res = await window.api.listInstalls();
+  adminData = res.ok ? { rows: res.rows, currentVersion: res.currentVersion } : { error: res.error || '?' };
+  renderInstalls();
+}
+function closeAdmin(){ $('adminOverlay').classList.remove('open'); }
+$('adminOpen').addEventListener('click', () => {
+  $('settings').classList.remove('open'); $('gear').setAttribute('aria-expanded', 'false');
+  $('adminOverlay').classList.add('open'); $('adminClose').focus();
+  loadInstalls();
+});
+$('adminRefresh').addEventListener('click', loadInstalls);
+$('adminClose').addEventListener('click', closeAdmin);
+$('adminOverlay').addEventListener('click', (e) => { if (e.target === $('adminOverlay')) closeAdmin(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('adminOverlay').classList.contains('open')) closeAdmin(); });
+
+// Reports this install now and every 4 hours. Errors are ignored.
+function startInstallReporting(){
+  if (!window.api || !window.api.reportInstall) return;
+  const report = () => window.api.reportInstall().catch(() => {});
+  report();
+  setInterval(report, 4 * 60 * 60 * 1000);
+  window.api.whoAmI().then((me) => { if (me.ok && me.isAdmin) $('adminOpen').hidden = false; }).catch(() => {});
+}
+
 function iconButton(cls, svg, title, onClick, disabled){
   const b = document.createElement('button'); b.type = 'button'; b.className = 'icon-btn ' + cls;
   b.innerHTML = svg; b.title = title; b.setAttribute('aria-label', title);
@@ -830,6 +934,7 @@ applyTheme(); applyLang(); preview(); renderChips(); renderHistory();
   if (!check.ok && !(await doLogin())) { setMsg('signinFail', { cls: 'err' }); return; }
   clearMsg();
   resolveDefaultOwnerNames();
+  startInstallReporting();
   if (wideLayout.matches) { recheckAllSynced(); ensureRecentSites(); } // Sites panel is already visible
 })();
 </script>
