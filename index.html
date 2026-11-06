@@ -409,7 +409,8 @@ function askConsent(){
 
 // ---------- people pickers: shared search + chips logic ----------
 // One factory, two instances (owners, members). list is mutated in place.
-function makePicker(list, ids){
+// Picking someone already in otherList moves them out of it.
+function makePicker(list, ids, otherList){
   let seq = 0;
   function render(){
     const box = $(ids.chips);
@@ -440,7 +441,9 @@ function makePicker(list, ids){
       const em = document.createElement('span'); em.className = 'remail'; em.textContent = p.email;
       btn.append(nm, em);
       btn.addEventListener('click', () => {
-        list.push(p); render();
+        const dup = otherList.findIndex((o) => o.email.toLowerCase() === p.email.toLowerCase());
+        if (dup >= 0) otherList.splice(dup, 1);
+        list.push(p); renderChips();
         $(ids.input).value = ''; closeResults(); $(ids.input).focus();
       });
       box.append(btn);
@@ -482,12 +485,36 @@ const DEFAULT_OWNERS = [
   { email: 'claquerre@stellaireconstruction.com' },
   { email: 'vlamontagne@stellaireconstruction.com' },
 ];
-let owners = DEFAULT_OWNERS.map((o) => ({ ...o })); // { name, email }
+// Default owner names and keys, cached locally by lowercase email.
+const OWNER_NAMES_KEY = 'defaultOwnerNames';
+function applyOwnerNames(map){
+  [DEFAULT_OWNERS, owners, members].forEach((l) => l.forEach((o) => {
+    const n = map[o.email.toLowerCase()];
+    if (n && !o.name) { o.name = n.name; o.key = n.key; }
+  }));
+  renderChips();
+}
+// Looks up each default owner's name with the people search.
+async function resolveDefaultOwnerNames(){
+  if (!window.api) return;
+  let map = {};
+  try { map = JSON.parse(localStorage.getItem(OWNER_NAMES_KEY) || '{}'); } catch {}
+  for (const o of DEFAULT_OWNERS) {
+    const res = await window.api.searchPeople(o.email);
+    const p = res.ok && (res.people || []).find((x) => x.email.toLowerCase() === o.email.toLowerCase());
+    if (p) map[o.email.toLowerCase()] = { name: p.name, key: p.key || '' };
+  }
+  try { localStorage.setItem(OWNER_NAMES_KEY, JSON.stringify(map)); } catch {}
+  applyOwnerNames(map);
+}
+
+let owners = DEFAULT_OWNERS.map((o) => ({ ...o })); // { name, email, key }
 let members = []; // added as plain members, not owners
 
-const ownersPicker = makePicker(owners, { chips: 'ownerChips', input: 'ownerInput', results: 'ownerResults', field: 'owners-field' });
-const membersPicker = makePicker(members, { chips: 'memberChips', input: 'memberInput', results: 'memberResults', field: 'members-field' });
+const ownersPicker = makePicker(owners, { chips: 'ownerChips', input: 'ownerInput', results: 'ownerResults', field: 'owners-field' }, members);
+const membersPicker = makePicker(members, { chips: 'memberChips', input: 'memberInput', results: 'memberResults', field: 'members-field' }, owners);
 function renderChips(){ ownersPicker.render(); membersPicker.render(); }
+try { applyOwnerNames(JSON.parse(localStorage.getItem(OWNER_NAMES_KEY) || '{}')); } catch {}
 function closeAllResults(){ ownersPicker.closeResults(); membersPicker.closeResults(); }
 
 // ---------- sites (history) ----------
@@ -802,6 +829,7 @@ applyTheme(); applyLang(); preview(); renderChips(); renderHistory();
   const check = await window.api.checkAuth();
   if (!check.ok && !(await doLogin())) { setMsg('signinFail', { cls: 'err' }); return; }
   clearMsg();
+  resolveDefaultOwnerNames();
   if (wideLayout.matches) { recheckAllSynced(); ensureRecentSites(); } // Sites panel is already visible
 })();
 </script>
