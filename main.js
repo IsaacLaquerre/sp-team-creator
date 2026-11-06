@@ -169,17 +169,18 @@ app.on('window-all-closed', () => {
 
 const cookieUrl = (c) => `http${c.secure ? 's' : ''}://${c.domain.replace(/^\./, '')}${c.path}`;
 const isSharePointCookie = (c) => /(^|\.)sharepoint\.com$/i.test(c.domain);
-const isMsLoginCookie = (c) => /(^|\.)(microsoftonline\.com|live\.com|hsprotect\.net)$/i.test(c.domain);
 
 // Gives SharePoint session cookies a far-future expiration so they persist to disk between launches.
 // Microsoft login cookies are left alone, persisting them breaks later sign-ins.
+// Host-only cookies are set without a domain, passing one would create a duplicate domain cookie.
 async function persistSessionCookies() {
   try {
     const cookies = await sp().cookies.get({});
     const farFuture = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 90; // 90 days
     await Promise.all(cookies.filter((c) => c.session && isSharePointCookie(c)).map((c) => {
       return sp().cookies.set({
-        url: cookieUrl(c), name: c.name, value: c.value, domain: c.domain, path: c.path,
+        url: cookieUrl(c), name: c.name, value: c.value, path: c.path,
+        ...(c.hostOnly ? {} : { domain: c.domain }),
         secure: c.secure, httpOnly: c.httpOnly, sameSite: c.sameSite || 'unspecified',
         expirationDate: farFuture,
       }).catch(() => {});
@@ -187,16 +188,14 @@ async function persistSessionCookies() {
   } catch {}
 }
 
-// Removes Microsoft login cookies so each sign-in starts from a clean state.
-async function clearMsLoginCookies() {
-  try {
-    const cookies = await sp().cookies.get({});
-    await Promise.all(cookies.filter(isMsLoginCookie).map((c) => sp().cookies.remove(cookieUrl(c), c.name).catch(() => {})));
-  } catch {}
+// Clears every cookie in the sign-in partition. Stale SharePoint or Microsoft cookies cause
+// a redirect loop after MFA that Microsoft blocks with AADSTS50196.
+async function clearAllCookies() {
+  try { await sp().clearStorageData({ storages: ['cookies'] }); } catch {}
 }
 
 // Opens a Microsoft 365 sign-in window.
-ipcMain.handle('login', () => clearMsLoginCookies().then(() => new Promise((resolve) => {
+ipcMain.handle('login', () => clearAllCookies().then(() => new Promise((resolve) => {
   const w = new BrowserWindow({ width: 520, height: 720, title: 'SharePoint', webPreferences: { partition: PARTITION } });
   w.setMenuBarVisibility(false);
   let done = false;
