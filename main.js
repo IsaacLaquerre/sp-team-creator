@@ -7,9 +7,24 @@ const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
 const { autoUpdater } = require('electron-updater');
 
+// Strips the Electron and app tokens so Microsoft sign-in sees a plain Chrome user agent.
+app.userAgentFallback = app.userAgentFallback.replace(/ (Electron|sp-team-creator|Équipe de projet)\/\S+/g, '');
+
 const TENANT = 'https://consstellaire.sharepoint.com';
 const PARTITION = 'persist:sharepoint'; // keeps your Microsoft sign-in between launches
 const sp = () => session.fromPartition(PARTITION);
+// Fetches without following redirects. A redirect means an expired session, so it is reported
+// as a 401 instead of hitting Microsoft login, which locks sign-in after too many hits (AADSTS50196).
+const spFetch = async (url, opts = {}) => {
+  const unauth = () => new Response(null, { status: 401 });
+  try {
+    const r = await sp().fetch(url, { ...opts, redirect: 'manual' });
+    return r.status >= 300 && r.status < 400 ? unauth() : r;
+  } catch (e) {
+    if (/redirect/i.test(e && e.message)) return unauth(); // Electron throws on a blocked redirect
+    throw e;
+  }
+};
 
 // Turns the group behind a site into a Teams team via EnsureTeamForGroupEx.
 // Runs after creation in the background, retrying a few times.
@@ -19,7 +34,7 @@ ipcMain.handle('teamifyGroup', async (_e, { siteUrl }) => {
   const base = siteUrl.replace(/\/$/, '');
   const attempt = async () => {
     const digest = await getDigestFor(base);
-    const r = await sp().fetch(`${base}/_api/GroupSiteManager/EnsureTeamForGroupEx`, {
+    const r = await spFetch(`${base}/_api/GroupSiteManager/EnsureTeamForGroupEx`, {
       method: 'POST', credentials: 'include',
       headers: {
         Accept: 'application/json;odata=verbose',
@@ -53,7 +68,7 @@ ipcMain.handle('demoteAfterCreate', async (_e, { siteUrl, groupId, memberEmails,
   if (!siteUrl || !groupId) return { ok: false, error: 'Missing site or group.' };
   const base = siteUrl.replace(/\/$/, '');
   try {
-    const meRes = await sp().fetch(`${base}/_api/web/currentuser?$select=Email,UserPrincipalName`, {
+    const meRes = await spFetch(`${base}/_api/web/currentuser?$select=Email,UserPrincipalName`, {
       credentials: 'include',
       headers: { Accept: 'application/json;odata=nometadata' },
     });
@@ -65,7 +80,7 @@ ipcMain.handle('demoteAfterCreate', async (_e, { siteUrl, groupId, memberEmails,
     if (myEmail && !protectedSet.has(myEmail)) toDemote.add(myEmail);
     if (!toDemote.size) return { ok: true, removed: [] };
 
-    const ownersRes = await sp().fetch(
+    const ownersRes = await spFetch(
       `${base}/_api/SP.Directory.DirectorySession/Group('${groupId}')/Owners?$top=50&$select=PrincipalName,Id,DisplayName,Mail`,
       { credentials: 'include', headers: { Accept: 'application/json;odata=verbose' } }
     );
@@ -81,7 +96,7 @@ ipcMain.handle('demoteAfterCreate', async (_e, { siteUrl, groupId, memberEmails,
     for (const owner of owners) {
       const mail = (owner.mail || '').toLowerCase();
       if (!toDemote.has(mail)) continue;
-      const r = await sp().fetch(
+      const r = await spFetch(
         `${base}/_api/SP.Directory.DirectorySession/Group('${groupId}')/Owners/Remove('${owner.id}')`,
         {
           method: 'POST', credentials: 'include',
@@ -152,15 +167,19 @@ app.on('window-all-closed', () => {
   setTimeout(() => app.exit(0), 1500); // force-quits if still running
 });
 
-// Gives session cookies a far-future expiration so they persist to disk between launches.
+const cookieUrl = (c) => `http${c.secure ? 's' : ''}://${c.domain.replace(/^\./, '')}${c.path}`;
+const isSharePointCookie = (c) => /(^|\.)sharepoint\.com$/i.test(c.domain);
+const isMsLoginCookie = (c) => /(^|\.)(microsoftonline\.com|live\.com|hsprotect\.net)$/i.test(c.domain);
+
+// Gives SharePoint session cookies a far-future expiration so they persist to disk between launches.
+// Microsoft login cookies are left alone, persisting them breaks later sign-ins.
 async function persistSessionCookies() {
   try {
     const cookies = await sp().cookies.get({});
     const farFuture = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 90; // 90 days
-    await Promise.all(cookies.filter((c) => c.session).map((c) => {
-      const url = `http${c.secure ? 's' : ''}://${c.domain.replace(/^\./, '')}${c.path}`;
+    await Promise.all(cookies.filter((c) => c.session && isSharePointCookie(c)).map((c) => {
       return sp().cookies.set({
-        url, name: c.name, value: c.value, domain: c.domain, path: c.path,
+        url: cookieUrl(c), name: c.name, value: c.value, domain: c.domain, path: c.path,
         secure: c.secure, httpOnly: c.httpOnly, sameSite: c.sameSite || 'unspecified',
         expirationDate: farFuture,
       }).catch(() => {});
@@ -168,8 +187,16 @@ async function persistSessionCookies() {
   } catch {}
 }
 
+// Removes Microsoft login cookies so each sign-in starts from a clean state.
+async function clearMsLoginCookies() {
+  try {
+    const cookies = await sp().cookies.get({});
+    await Promise.all(cookies.filter(isMsLoginCookie).map((c) => sp().cookies.remove(cookieUrl(c), c.name).catch(() => {})));
+  } catch {}
+}
+
 // Opens a Microsoft 365 sign-in window.
-ipcMain.handle('login', () => new Promise((resolve) => {
+ipcMain.handle('login', () => clearMsLoginCookies().then(() => new Promise((resolve) => {
   const w = new BrowserWindow({ width: 520, height: 720, title: 'SharePoint', webPreferences: { partition: PARTITION } });
   w.setMenuBarVisibility(false);
   let done = false;
@@ -179,11 +206,11 @@ ipcMain.handle('login', () => new Promise((resolve) => {
   });
   w.on('closed', () => finish(false));
   w.loadURL(TENANT);
-}));
+})));
 
 // Requests a site-scoped X-RequestDigest.
 async function getDigestFor(siteUrl) {
-  const r = await sp().fetch(`${siteUrl}/_api/contextinfo`, {
+  const r = await spFetch(`${siteUrl}/_api/contextinfo`, {
     method: 'POST', credentials: 'include',
     headers: { Accept: 'application/json;odata=nometadata' },
   });
@@ -206,7 +233,7 @@ ipcMain.handle('checkAuth', async () => {
 ipcMain.handle('create', async (_e, { displayName, alias, owners }) => {
   try {
     const digest = await getDigest();
-    const r = await sp().fetch(`${TENANT}/_api/GroupSiteManager/CreateGroupEx`, {
+    const r = await spFetch(`${TENANT}/_api/GroupSiteManager/CreateGroupEx`, {
       method: 'POST', credentials: 'include',
       headers: {
         Accept: 'application/json;odata=verbose',
@@ -238,7 +265,7 @@ ipcMain.handle('checkSiteExists', async (_e, { siteUrl }) => {
   try {
     if (!siteUrl) return { ok: false, error: 'No site URL.' };
     const base = siteUrl.replace(/\/$/, '');
-    const r = await sp().fetch(`${base}/_api/web/currentuser?$select=Id`, {
+    const r = await spFetch(`${base}/_api/web/currentuser?$select=Id`, {
       credentials: 'include', headers: { Accept: 'application/json;odata=nometadata' },
     });
     if (r.ok) return { ok: true, exists: true };
@@ -256,7 +283,7 @@ ipcMain.handle('syncSite', async (_e, { siteUrl }) => {
     if (!siteUrl) return { ok: false, error: 'No site URL.' };
     const base = siteUrl.replace(/\/$/, '');
     const getJson = async (path) => {
-      const r = await sp().fetch(`${base}${path}`, { credentials: 'include', headers: { Accept: 'application/json;odata=nometadata' } });
+      const r = await spFetch(`${base}${path}`, { credentials: 'include', headers: { Accept: 'application/json;odata=nometadata' } });
       if (!r.ok) throw new Error(`HTTP ${r.status} for ${path}`);
       return r.json();
     };
@@ -288,7 +315,7 @@ ipcMain.handle('searchPeople', async (_e, query) => {
   try {
     if (!query || query.length < 2) return { ok: true, people: [] };
     const digest = await getDigest();
-    const r = await sp().fetch(`${TENANT}/_api/SP.UI.ApplicationPages.ClientPeoplePickerWebServiceInterface.ClientPeoplePickerSearchUser`, {
+    const r = await spFetch(`${TENANT}/_api/SP.UI.ApplicationPages.ClientPeoplePickerWebServiceInterface.ClientPeoplePickerSearchUser`, {
       method: 'POST', credentials: 'include',
       headers: {
         Accept: 'application/json;odata=verbose',
@@ -328,7 +355,7 @@ ipcMain.handle('searchPeople', async (_e, query) => {
 ipcMain.handle('listRecentSites', async () => {
   try {
     const url = `${TENANT}/_api/v2.1/insights/recentSites?$expand=insights,activityItems($expand=analytics($expand=allTime($expand=activities)))&$top=81`;
-    const r = await sp().fetch(url, { credentials: 'include', headers: { Accept: 'application/json' } });
+    const r = await spFetch(url, { credentials: 'include', headers: { Accept: 'application/json' } });
     if (!r.ok) {
       if (r.status === 401 || r.status === 403) throw Object.assign(new Error(`HTTP ${r.status}`), { auth: true });
       return { ok: false, error: `HTTP ${r.status}` };
