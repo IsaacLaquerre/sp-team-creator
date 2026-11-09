@@ -243,7 +243,7 @@ button.primary:disabled{opacity:.55;cursor:default}
     <div id="adminStatus" class="hist-meta"></div>
     <div class="admin-table-wrap">
       <table id="adminTable">
-        <thead><tr><th data-i="adminName"></th><th data-i="adminEmail"></th><th data-i="adminComputer"></th><th data-i="adminVersion"></th><th data-i="adminLastSeen"></th></tr></thead>
+        <thead><tr><th data-i="adminName"></th><th data-i="adminEmail"></th><th data-i="adminRole"></th><th data-i="adminComputer"></th><th data-i="adminVersion"></th><th data-i="adminLastSeen"></th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -294,7 +294,7 @@ const S = {
     updateLink:"Voir la publication sur GitHub", updateLater:"Plus tard", updateRestart:"Redémarrer maintenant",
     updateNow:"Mettre à jour maintenant", updateNowTitle:"Installer la version {v} et redémarrer",
     adminOpen:"Installations", adminTitle:"Installations de l’application", adminRefresh:"Actualiser", adminClose:"Fermer",
-    adminName:"Nom", adminEmail:"Courriel", adminComputer:"Ordinateur", adminVersion:"Version", adminLastSeen:"Dernière activité",
+    adminName:"Nom", adminEmail:"Courriel", adminRole:"Rôle", adminComputer:"Ordinateur", adminVersion:"Version", adminLastSeen:"Dernière activité",
     adminLoading:"Chargement…", adminEmpty:"Aucune installation signalée pour l’instant.", adminFail:"Impossible de lire la liste : ",
     adminSummary:"{n} installation(s), {o} à mettre à jour (dernière version : {v})" },
   en: { heading:"Create a project team", number:"Number", title:"Project title",
@@ -324,7 +324,7 @@ const S = {
     updateLink:"View the release on GitHub", updateLater:"Later", updateRestart:"Restart now",
     updateNow:"Update now", updateNowTitle:"Install version {v} and restart",
     adminOpen:"Installations", adminTitle:"App installations", adminRefresh:"Refresh", adminClose:"Close",
-    adminName:"Name", adminEmail:"Email", adminComputer:"Computer", adminVersion:"Version", adminLastSeen:"Last seen",
+    adminName:"Name", adminEmail:"Email", adminRole:"Role", adminComputer:"Computer", adminVersion:"Version", adminLastSeen:"Last seen",
     adminLoading:"Loading…", adminEmpty:"No installs reported yet.", adminFail:"Couldn't read the list: ",
     adminSummary:"{n} install(s), {o} out of date (latest: {v})" },
 };
@@ -723,9 +723,9 @@ function renderInstalls(){
   rows.forEach((r) => {
     const tr = document.createElement('tr');
     const seen = r.lastSeen ? new Date(r.lastSeen).toLocaleString(lang() === 'fr' ? 'fr-CA' : 'en-CA', { dateStyle: 'medium', timeStyle: 'short' }) : '';
-    [r.name, r.email, r.computer, r.version, seen].forEach((v, i) => {
+    [r.name, r.email, r.role, r.computer, r.version, seen].forEach((v, i) => {
       const td = document.createElement('td'); td.textContent = v;
-      if (i === 3 && compareVersions(r.version, latest) < 0) td.className = 'old';
+      if (i === 4 && compareVersions(r.version, latest) < 0) td.className = 'old';
       tr.append(td);
     });
     body.append(tr);
