@@ -1,13 +1,13 @@
 {
   "name": "sp-team-creator",
-  "version": "1.0.9-alpha",
+  "version": "1.0.10-alpha",
   "description": "Équipe de projet",
   "main": "main.js",
   "author": "Isaac",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --win",
-    "release": "electron-builder --win --publish always"
+    "release": "node scripts/release.js"
   },
   "dependencies": {
     "electron-updater": "^6.3.9"
