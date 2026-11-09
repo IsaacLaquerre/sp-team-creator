@@ -1,5 +1,5 @@
 // App entry: main window, lifecycle and module registration. Features live in lib/.
-const { app, BrowserWindow, screen } = require('electron');
+const { app, BrowserWindow, Menu, screen } = require('electron');
 const path = require('path');
 const authSession = require('./lib/session');
 const teams = require('./lib/teams');
@@ -20,6 +20,21 @@ onedrive.register({ getWindow });
 installs.register();
 updater.register({ getWindow });
 
+// Opens DevTools only for SharePoint-confirmed admins. Removes the default menu and its shortcuts.
+function restrictDevTools(win) {
+  Menu.setApplicationMenu(null);
+  win.webContents.on('before-input-event', (e, input) => {
+    const k = (input.key || '').toLowerCase();
+    const isDevToolsKey = k === 'f12' || (input.control && input.shift && ['i', 'j', 'c'].includes(k));
+    if (input.type !== 'keyDown' || !isDevToolsKey) return;
+    e.preventDefault();
+    if (installs.isCurrentUserAdmin()) win.webContents.toggleDevTools();
+  });
+  win.webContents.on('devtools-opened', () => {
+    if (!installs.isCurrentUserAdmin()) win.webContents.closeDevTools();
+  });
+}
+
 app.whenReady().then(() => {
   const { height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
   const saved = loadWindowState();
@@ -31,6 +46,10 @@ app.whenReady().then(() => {
   });
   if (saved && saved.maximized) win.maximize();
   win.on('close', () => saveWindowState(win));
+  // Keeps the window on index.html: blocks navigation and new windows.
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  if (app.isPackaged) restrictDevTools(win);
   mainWindow = win;
   win.setMenuBarVisibility(false);
   win.loadFile('index.html');
