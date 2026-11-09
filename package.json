@@ -1,6 +1,6 @@
 {
   "name": "sp-team-creator",
-  "version": "1.0.8-alpha",
+  "version": "1.0.9-alpha",
   "description": "Équipe de projet",
   "main": "main.js",
   "author": "Isaac",
@@ -19,9 +19,22 @@
   "build": {
     "appId": "com.consstellaire.sp-team-creator",
     "productName": "Équipe de projet",
-    "files": ["main.js", "preload.js", "index.html", "renderer.js", "package.json", "lib/**/*", "assets/**/*"],
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "renderer.js",
+      "package.json",
+      "lib/**/*",
+      "assets/**/*"
+    ],
     "icon": "assets/icon.ico",
-    "win": { "target": ["nsis"], "icon": "assets/icon.ico" },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "assets/icon.ico"
+    },
     "electronFuses": {
       "runAsNode": false,
       "enableNodeOptionsEnvironmentVariable": false,
