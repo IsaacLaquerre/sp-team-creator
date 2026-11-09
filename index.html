@@ -708,13 +708,14 @@ function compareVersions(a, b){
   if (!B.pre) return -1;
   return A.pre.localeCompare(B.pre, undefined, { numeric: true });
 }
-let adminData = null; // { rows, currentVersion } or { error }
+let adminData = null; // { rows, latestVersion } or { error }
 function renderInstalls(){
   const body = $('adminTable').tBodies[0]; body.textContent = '';
   if (!adminData) return;
   if (adminData.error) { $('adminStatus').textContent = t('adminFail') + adminData.error; $('adminStatus').className = 'hist-meta err'; return; }
   const rows = adminData.rows.slice();
-  const latest = rows.reduce((m, r) => compareVersions(r.version, m) > 0 ? r.version : m, adminData.currentVersion);
+  // Latest GitHub release, or the newest reported version if GitHub was unreachable.
+  const latest = adminData.latestVersion || rows.reduce((m, r) => compareVersions(r.version, m) > 0 ? r.version : m, '');
   rows.sort((a, b) => compareVersions(b.version, a.version) || String(b.lastSeen).localeCompare(String(a.lastSeen)));
   const old = rows.filter((r) => compareVersions(r.version, latest) < 0).length;
   $('adminStatus').className = 'hist-meta';
@@ -734,7 +735,7 @@ async function loadInstalls(){
   adminData = null; renderInstalls();
   $('adminStatus').className = 'hist-meta'; $('adminStatus').textContent = t('adminLoading');
   const res = await window.api.listInstalls();
-  adminData = res.ok ? { rows: res.rows, currentVersion: res.currentVersion } : { error: res.error || '?' };
+  adminData = res.ok ? { rows: res.rows, latestVersion: res.latestVersion } : { error: res.error || '?' };
   renderInstalls();
 }
 function closeAdmin(){ $('adminOverlay').classList.remove('open'); }
