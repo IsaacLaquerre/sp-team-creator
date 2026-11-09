@@ -262,14 +262,13 @@ ipcMain.handle('listInstalls', async () => {
 });
 
 // --- Auto-update -----------------------------------------------------------
-// Checks GitHub Releases on launch, downloads updates in the background,
-// installs on next quit. GITHUB_UPDATE_TOKEN is a fine-grained PAT scoped
-// to this repo only, Contents: Read-only.
+// Checks GitHub Releases on launch and downloads updates in the background.
+// GITHUB_UPDATE_TOKEN is a fine-grained read-only PAT scoped to this repo only.
 const GITHUB_UPDATE_TOKEN = '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';
 const GITHUB_OWNER = 'IsaacLaquerre';
 const GITHUB_REPO = 'sp-team-creator';
 autoUpdater.autoDownload = true;
-autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.autoInstallOnAppQuit = false;
 autoUpdater.allowPrerelease = true; // TEMPORARY, remove for stable releases
 // electron-builder only publishes latest.yml. Without this, electron-updater
 // derives the channel from the version's prerelease tag (e.g. "alpha") and

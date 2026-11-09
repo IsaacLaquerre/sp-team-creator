@@ -62,9 +62,11 @@ button.primary:disabled{opacity:.55;cursor:default}
 #updateDialog h2{margin:0 0 12px;font-size:18px}
 #updateDialog p{margin:0 0 14px;color:var(--mute);font-size:14px}
 #updateLink{display:inline-block;margin-bottom:18px;color:var(--accent);font-size:14px;font-weight:600;cursor:pointer}
-.settings-btn{width:100%;font:inherit;font-weight:600;font-size:13.5px;background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px;cursor:pointer}
+.settings-btn{width:100%;font:inherit;font-weight:600;font-size:13.5px;background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px;cursor:pointer;margin-top:12px}
 .settings-btn:hover{border-color:var(--accent)}
-#settings .row:has(+ #adminOpen[hidden]){margin-bottom:0}
+.settings-btn.accent{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.settings-btn.accent:hover{filter:brightness(1.08)}
+#settings .row:last-of-type{margin-bottom:0}
 #adminOverlay{display:none;position:fixed;inset:0;background:rgba(10,14,18,.55);place-items:center;z-index:11;padding:20px}
 #adminOverlay.open{display:grid}
 #adminDialog{width:100%;max-width:860px;max-height:calc(100vh - 40px);display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:22px}
@@ -156,6 +158,7 @@ button.primary:disabled{opacity:.55;cursor:default}
       <select id="lang"><option value="system" data-i="system"></option><option value="fr">Français</option><option value="en">English</option></select></div>
     <div class="row"><label for="theme" data-i="theme"></label>
       <select id="theme"><option value="system" data-i="system"></option><option value="light" data-i="light"></option><option value="dark" data-i="dark"></option></select></div>
+    <button id="updateNow" type="button" class="settings-btn accent" hidden></button>
     <button id="adminOpen" type="button" class="settings-btn" data-i="adminOpen" hidden></button>
   </div>
 
@@ -289,6 +292,7 @@ const S = {
     membersWorking:"Ajout des membres…", membersOk:"Membres ajoutés.", membersFail:"Impossible d’ajouter certains membres : ",
     updateTitle:"Mise à jour prête", updateBody:"La version {v} a été téléchargée. L’application va redémarrer pour l’installer.",
     updateLink:"Voir la publication sur GitHub", updateLater:"Plus tard", updateRestart:"Redémarrer maintenant",
+    updateNow:"Mettre à jour maintenant", updateNowTitle:"Installer la version {v} et redémarrer",
     adminOpen:"Installations", adminTitle:"Installations de l’application", adminRefresh:"Actualiser", adminClose:"Fermer",
     adminName:"Nom", adminEmail:"Courriel", adminComputer:"Ordinateur", adminVersion:"Version", adminLastSeen:"Dernière activité",
     adminLoading:"Chargement…", adminEmpty:"Aucune installation signalée pour l’instant.", adminFail:"Impossible de lire la liste : ",
@@ -318,6 +322,7 @@ const S = {
     membersWorking:"Adding members…", membersOk:"Members added.", membersFail:"Couldn't add some members: ",
     updateTitle:"Update ready", updateBody:"Version {v} has been downloaded. The app will restart to install it.",
     updateLink:"View the release on GitHub", updateLater:"Later", updateRestart:"Restart now",
+    updateNow:"Update now", updateNowTitle:"Install version {v} and restart",
     adminOpen:"Installations", adminTitle:"App installations", adminRefresh:"Refresh", adminClose:"Close",
     adminName:"Name", adminEmail:"Email", adminComputer:"Computer", adminVersion:"Version", adminLastSeen:"Last seen",
     adminLoading:"Loading…", adminEmpty:"No installs reported yet.", adminFail:"Couldn't read the list: ",
@@ -340,6 +345,7 @@ function applyLang(){
   renderMsg();
   Object.keys(statusState).forEach(renderStatus);
   if (adminData) renderInstalls();
+  renderUpdateNow();
 }
 
 // ---------- tabs ----------
@@ -671,13 +677,24 @@ setInterval(recheckAllSynced, 20000);
 // Fires immediately when main.js's file watcher sees a change.
 if (window.api && window.api.onSyncSettingsChanged) window.api.onSyncSettingsChanged(recheckAllSynced);
 
+// Downloaded update waiting to install, or null. "Later" reveals Update now in settings.
+let pendingUpdate = null;
+function renderUpdateNow(){
+  const b = $('updateNow');
+  b.hidden = !(pendingUpdate && pendingUpdate.postponed);
+  b.textContent = t('updateNow');
+  b.title = pendingUpdate ? t('updateNowTitle').replace('{v}', pendingUpdate.version) : '';
+}
 function showUpdateReady(version, url){
+  pendingUpdate = { version, url, postponed: false };
   $('updateBody').textContent = t('updateBody').replace('{v}', version);
   $('updateLink').onclick = () => window.api.openExternal(url);
-  $('updateLater').onclick = () => $('updateOverlay').classList.remove('open');
+  $('updateLater').onclick = () => { $('updateOverlay').classList.remove('open'); pendingUpdate.postponed = true; renderUpdateNow(); };
   $('updateRestart').onclick = () => window.api.quitAndInstall();
   $('updateOverlay').classList.add('open');
+  renderUpdateNow();
 }
+$('updateNow').addEventListener('click', () => window.api && window.api.quitAndInstall());
 if (window.api && window.api.onUpdateReady) window.api.onUpdateReady((_e, { version, url }) => showUpdateReady(version, url));
 
 // ---------- installations panel (admins only) ----------
