@@ -471,6 +471,7 @@ async function loadInstalls(){
   adminData = null; renderInstalls();
   $('adminStatus').className = 'hist-meta'; $('adminStatus').textContent = t('adminLoading');
   const res = await window.api.listInstalls();
+  if (res.latestError) console.error('[installs] Latest GitHub release lookup failed:', res.latestError);
   adminData = res.ok ? { rows: res.rows, latestVersion: res.latestVersion } : { error: res.error || '?' };
   renderInstalls();
 }
