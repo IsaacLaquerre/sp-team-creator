@@ -19,7 +19,7 @@
   "build": {
     "appId": "com.consstellaire.sp-team-creator",
     "productName": "Équipe de projet",
-    "files": ["main.js", "preload.js", "index.html", "package.json", "assets/**/*"],
+    "files": ["main.js", "preload.js", "index.html", "package.json", "lib/**/*", "assets/**/*"],
     "icon": "assets/icon.ico",
     "win": { "target": ["nsis"], "icon": "assets/icon.ico" },
     "publish": {
